@@ -108,6 +108,10 @@ type_command_details command_details[] =
   { "symbol", cmdSymbolValue, "<symbol>", "retrieves the value of the symbol from the .map file" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
+  { "mpoke", cmdMPoke, "<addr28> <byte/s>", "pokes byte value/s into <addr28> (and beyond, if multiple values)" },
+  { "mpokew", cmdMPokeW, "<addr28> <word/s>", "pokes word value/s into <addr28> (and beyond, if multiple values)" },
+  { "mpoked", cmdMPokeD, "<addr28> <dword/s>", "pokes dword value/s into <addr28> (and beyond, if multiple values)" },
+  { "mpokeq", cmdMPokeQ, "<addr28> <qword/s>", "pokes qword value/s into <addr28> (and beyond, if multiple values)" },
   { "back", cmdBackTrace, NULL, "produces a rough backtrace from the current contents of the stack" },
   { "up", cmdUpFrame, NULL, "The 'dis' disassembly command will disassemble one stack-level up from the current frame" },
   { "down", cmdDownFrame, NULL, "The 'dis' disassembly command will disassemble one stack-level down from the current frame" },
@@ -1229,6 +1233,57 @@ mem_data* get_mem28array(int addr)
   }
 
   return multimem;
+}
+
+void cmd_poke(int size)
+{
+  char* strAddr = strtok(NULL, " ");
+
+  if (strAddr == NULL)
+  {
+    printf("Missing <addr> parameter!\n");
+    return;
+  }
+
+  int addr28 = get_sym_value(strAddr);
+
+  sprintf(outbuf, "s%08X", addr28);
+
+  char str[10] = "";
+  char * strVal;
+  unsigned int val;
+  while ( (strVal = strtok(NULL, " ")) != NULL)
+  {
+    sscanf(strVal, "%X", &val);
+
+    for (int k = 0; k < size; k++)
+    {
+      sprintf(str, " %X", val & 0xff);
+      strcat(outbuf, str);
+      val >>= 8;
+    }
+  }
+
+  serialWrite(outbuf);
+  serialRead(inbuf, BUFSIZE);
+}
+
+void cmdMPoke(void)
+{
+  cmd_poke(1);
+}
+
+void cmdMPokeW(void)
+{
+  cmd_poke(2);
+}
+void cmdMPokeD(void)
+{
+  cmd_poke(4);
+}
+void cmdMPokeQ(void)
+{
+  cmd_poke(8);
 }
 
 // write buffer to client ram
