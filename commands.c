@@ -46,7 +46,8 @@ bool continue_mode = false;
 char outbuf[BUFSIZE] = { 0 };  // the buffer of what command is output to the remote monitor
 char inbuf[BUFSIZE] = { 0 }; // the buffer of what is read in from the remote monitor
 
-char* type_names[] = { "BYTE  ", "WORD  ", "DWORD ", "STRING", "DUMP  ", "MDUMP " };
+char* type_names[] = { "BYTE   ", "WORD   ", "DWORD  ", "QWORD  ", "STRING ", "DUMP   ",
+                       "MBYTE  ", "MWORD  ", "MDWORD ", "MQWORD ", "MSTRING", "MDUMP  " };
 
 bool autocls = false; // auto-clearscreen flag
 bool autowatch = false; // auto-watch flag
@@ -79,15 +80,27 @@ type_command_details command_details[] =
   { "pb", cmdPrintByte, "<addr>", "Prints the byte-value of the given address" },
   { "pw", cmdPrintWord, "<addr>", "Prints the word-value of the given address" },
   { "pd", cmdPrintDWord, "<addr>", "Prints the dword-value of the given address" },
+  { "pq", cmdPrintQWord, "<addr>", "Prints the qword-value of the given address" },
   { "ps", cmdPrintString, "<addr>", "Prints the null-terminated string-value found at the given address" },
+  { "pmb", cmdPrintMByte, "<addr28>", "Prints the byte-value of the given 28-bit address" },
+  { "pmw", cmdPrintMWord, "<addr28>", "Prints the word-value of the given 28-bit address" },
+  { "pmd", cmdPrintMDWord, "<addr28>", "Prints the dword-value of the given 28-bit address" },
+  { "pmq", cmdPrintMQWord, "<addr28>", "Prints the qword-value of the given 28-bit address" },
+  { "pms", cmdPrintMString, "<addr28>", "Prints the null-terminated string-value found at the given 28-bit address" },
   { "cls", cmdClearScreen, NULL, "Clears the screen" }, { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
   { "break", cmdSetBreakpoint, "<addr>", "Sets the hardware breakpoint to the desired address" },
   { "sbreak", cmdSetSoftwareBreakpoint, "<addr>", "Sets the software breakpoint to the desired address" },
   { "wb", cmdWatchByte, "<addr>", "Watches the byte-value of the given address" },
   { "ww", cmdWatchWord, "<addr>", "Watches the word-value of the given address" },
   { "wd", cmdWatchDWord, "<addr>", "Watches the dword-value of the given address" },
+  { "wq", cmdWatchQWord, "<addr>", "Watches the qword-value of the given address" },
   { "ws", cmdWatchString, "<addr>", "Watches the null-terminated string-value found at the given address" },
   { "wdump", cmdWatchDump, "<addr> [<count>]", "Watches a dump of bytes at the given address" },
+  { "wmb", cmdWatchMByte, "<addr28>", "Watches the byte-value of the given 28-bit address" },
+  { "wmw", cmdWatchMWord, "<addr28>", "Watches the word-value of the given 28-bit address" },
+  { "wmd", cmdWatchMDWord, "<addr28>", "Watches the dword-value of the given 28-bit address" },
+  { "wmq", cmdWatchMQWord, "<addr28>", "Watches the qword-value of the given 28-bit address" },
+  { "wms", cmdWatchMString, "<addr28>", "Watches the null-terminated string-value found at the given 28-bit address" },
   { "wmdump", cmdWatchMDump, "<addr28> [<count>]", "Watches an mdump of bytes at the given 28-bit address" },
   { "watches", cmdWatches, NULL, "Lists all watches and their present values" },
   { "wdel", cmdDeleteWatch, "<watch#>/all", "Deletes the watch number specified (use 'watches' command to get a list of existing watch numbers)" },
@@ -1375,6 +1388,11 @@ void mdump(int addr, int total)
       if (k == 8) // add extra space prior to 8th byte
         printf(" ");
 
+      if (cnt+k >= total) {
+        printf("   ");
+        continue;
+      }
+
       printf("%02X ", mem.b[k]);
     }
 
@@ -1382,6 +1400,9 @@ void mdump(int addr, int total)
 
     for (int k = 0; k < 16; k++)
     {
+      if (cnt+k == total)
+        break;
+
       int c = mem.b[k];
       print_char(c);
     }
@@ -2468,11 +2489,11 @@ int get_sym_value(char* token)
   }
 }
 
-void print_byte(char *token)
+void print_byte(char *token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, false);
+  mem_data mem = get_mem(addr, useAddr28);
 
   printf(" %s: %02X\n", token, mem.b[0]);
 }
@@ -2483,15 +2504,25 @@ void cmdPrintByte(void)
 
   if (token != NULL)
   {
-    print_byte(token);
+    print_byte(token, false);
   }
 }
 
-void print_word(char* token)
+void cmdPrintMByte(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_byte(token, true);
+  }
+}
+
+void print_word(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, false);
+  mem_data mem = get_mem(addr, useAddr28);
 
   printf(" %s: %02X%02X\n", token, mem.b[1], mem.b[0]);
 }
@@ -2502,15 +2533,25 @@ void cmdPrintWord(void)
 
   if (token != NULL)
   {
-    print_word(token);
+    print_word(token, false);
   }
 }
 
-void print_dword(char* token)
+void cmdPrintMWord(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_word(token, true);
+  }
+}
+
+void print_dword(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, false);
+  mem_data mem = get_mem(addr, useAddr28);
 
   printf(" %s: %02X%02X%02X%02X\n", token, mem.b[3], mem.b[2], mem.b[1], mem.b[0]);
 }
@@ -2521,11 +2562,52 @@ void cmdPrintDWord(void)
 
   if (token != NULL)
   {
-    print_dword(token);
+    print_dword(token, false);
   }
 }
 
-void print_string(char* token)
+void cmdPrintMDWord(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_dword(token, true);
+  }
+}
+
+void print_qword(char* token, bool useAddr28)
+{
+  int addr = get_sym_value(token);
+
+  mem_data mem = get_mem(addr, useAddr28);
+
+  printf(" %s: %02X%02X%02X%02X%02X%02X%02X%02X\n", token, 
+      mem.b[7], mem.b[6], mem.b[5], mem.b[4],
+      mem.b[3], mem.b[2], mem.b[1], mem.b[0]);
+}
+
+void cmdPrintQWord(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_qword(token, false);
+  }
+}
+
+void cmdPrintMQWord(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_qword(token, true);
+  }
+}
+
+void print_string(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
   static char string[2048] = { 0 };
@@ -2535,7 +2617,7 @@ void print_string(char* token)
 
   while (1)
   {
-    mem_data mem = get_mem(addr+cnt, false);
+    mem_data mem = get_mem(addr+cnt, useAddr28);
 
     for (int k = 0; k < 16; k++)
     {
@@ -2594,7 +2676,17 @@ void cmdPrintString(void)
 
   if (token != NULL)
   {
-    print_string(token);
+    print_string(token, false);
+  }
+}
+
+void cmdPrintMString(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_string(token, true);
   }
 }
 
@@ -2753,8 +2845,15 @@ void cmd_watch(type_watch type)
     {
       if (type == TYPE_DUMP || type == TYPE_MDUMP) {
         we.param1 = token;
+        token = strtok(NULL, " ");
+        if (token != NULL)
+        {
+          we.name = token;
+        }
       }
-      else {
+
+      if (token != NULL)
+      {
         // grab a new symbol name?
         type_symmap_entry sme;
         sme.addr = get_sym_value(we.name);
@@ -2789,6 +2888,11 @@ void cmdWatchDWord(void)
   cmd_watch(TYPE_DWORD);
 }
 
+void cmdWatchQWord(void)
+{
+  cmd_watch(TYPE_QWORD);
+}
+
 void cmdWatchString(void)
 {
   cmd_watch(TYPE_STRING);
@@ -2797,6 +2901,31 @@ void cmdWatchString(void)
 void cmdWatchDump(void)
 {
   cmd_watch(TYPE_DUMP);
+}
+
+void cmdWatchMByte(void)
+{
+  cmd_watch(TYPE_MBYTE);
+}
+
+void cmdWatchMWord(void)
+{
+  cmd_watch(TYPE_MWORD);
+}
+
+void cmdWatchMDWord(void)
+{
+  cmd_watch(TYPE_MDWORD);
+}
+
+void cmdWatchMQWord(void)
+{
+  cmd_watch(TYPE_MQWORD);
+}
+
+void cmdWatchMString(void)
+{
+  cmd_watch(TYPE_MSTRING);
 }
 
 void cmdWatchMDump(void)
@@ -2819,12 +2948,19 @@ void cmdWatches(void)
 
     switch (iter->type)
     {
-      case TYPE_BYTE:   print_byte(iter->name);   break;
-      case TYPE_WORD:   print_word(iter->name);   break;
-      case TYPE_DWORD:  print_dword(iter->name);  break;
-      case TYPE_STRING: print_string(iter->name); break;
+      case TYPE_BYTE:   print_byte(iter->name, false);   break;
+      case TYPE_WORD:   print_word(iter->name, false);   break;
+      case TYPE_DWORD:  print_dword(iter->name, false);  break;
+      case TYPE_QWORD:  print_qword(iter->name, false);  break;
+      case TYPE_STRING: print_string(iter->name, false); break;
       case TYPE_DUMP:   print_dump(iter);         break;
-      case TYPE_MDUMP:  print_mdump(iter);        break;
+
+      case TYPE_MBYTE:   print_byte(iter->name, true);   break;
+      case TYPE_MWORD:   print_word(iter->name, true);   break;
+      case TYPE_MDWORD:  print_dword(iter->name, true);  break;
+      case TYPE_MQWORD:  print_qword(iter->name, true);  break;
+      case TYPE_MSTRING: print_string(iter->name, true); break;
+      case TYPE_MDUMP:   print_mdump(iter);        break;
     }
 
     iter = iter->next;

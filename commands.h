@@ -21,17 +21,28 @@ void cmdFinish(void);
 void cmdPrintByte(void);
 void cmdPrintWord(void);
 void cmdPrintDWord(void);
+void cmdPrintQWord(void);
 void cmdPrintString(void);
+void cmdPrintMByte(void);
+void cmdPrintMWord(void);
+void cmdPrintMDWord(void);
+void cmdPrintMQWord(void);
+void cmdPrintMString(void);
 void cmdClearScreen(void);
 void cmdAutoClearScreen(void);
 void cmdSetBreakpoint(void);
 void cmdSetSoftwareBreakpoint(void);
 void cmdWatchByte(void);
-void cmdWatchByte(void);
 void cmdWatchWord(void);
 void cmdWatchDWord(void);
+void cmdWatchQWord(void);
 void cmdWatchString(void);
 void cmdWatchDump(void);
+void cmdWatchMByte(void);
+void cmdWatchMWord(void);
+void cmdWatchMDWord(void);
+void cmdWatchMQWord(void);
+void cmdWatchMString(void);
 void cmdWatchMDump(void);
 void cmdWatches(void);
 void cmdDeleteWatch(void);
@@ -96,7 +107,8 @@ typedef struct t_o
   struct t_o* next;
 } type_offsets;
 
-typedef enum { TYPE_BYTE, TYPE_WORD, TYPE_DWORD, TYPE_STRING, TYPE_DUMP, TYPE_MDUMP } type_watch;
+typedef enum { TYPE_BYTE, TYPE_WORD, TYPE_DWORD, TYPE_QWORD, TYPE_STRING, TYPE_DUMP,
+    TYPE_MBYTE, TYPE_MWORD, TYPE_MDWORD, TYPE_MQWORD, TYPE_MSTRING, TYPE_MDUMP } type_watch;
 extern char* type_names[];
 
 typedef struct we
