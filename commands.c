@@ -51,6 +51,7 @@ char* type_names[] = { "BYTE   ", "WORD   ", "DWORD  ", "QWORD  ", "STRING ", "D
 
 bool autocls = false; // auto-clearscreen flag
 bool autowatch = false; // auto-watch flag
+bool autolocals = false; // auto-locals flag
 bool petscii = false; // show chars in dumps based on petscii
 bool fastmode = false; // switch for slow (2,000,000bps) and fast (4,000,000bps) modes
 bool ctrlcflag = false; // a flag to keep track of whether ctrl-c was caught
@@ -87,7 +88,8 @@ type_command_details command_details[] =
   { "pmd", cmdPrintMDWord, "<addr28>", "Prints the dword-value of the given 28-bit address" },
   { "pmq", cmdPrintMQWord, "<addr28>", "Prints the qword-value of the given 28-bit address" },
   { "pms", cmdPrintMString, "<addr28>", "Prints the null-terminated string-value found at the given 28-bit address" },
-  { "cls", cmdClearScreen, NULL, "Clears the screen" }, { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
+  { "cls", cmdClearScreen, NULL, "Clears the screen" },
+  { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
   { "break", cmdSetBreakpoint, "<addr>", "Sets the hardware breakpoint to the desired address" },
   { "sbreak", cmdSetSoftwareBreakpoint, "<addr>", "Sets the software breakpoint to the desired address" },
   { "wb", cmdWatchByte, "<addr>", "Watches the byte-value of the given address" },
@@ -127,8 +129,17 @@ type_command_details command_details[] =
   { "=", cmdForwardDis, "[<count>]", "move forward in disassembly of pc history from 'z' command" },
   { "-", cmdBackwardDis, "[<count>]", "move backward in disassembly of pc history from 'z' command" },
   { "mcopy", cmdMCopy, "<src_addr> <dest_addr> <count>", "copy data from source location to destination (28-bit addresses)" },
+  { "locals", cmdLocals, NULL, "Print out the values of any local variables within the current c-function (needs gurce's cc65 .list file)" },
+  { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { NULL, NULL, NULL, NULL }
 };
+
+// a few function prototypes
+mem_data get_mem(int addr, bool useAddr28);
+void print_byte_at_addr(char* token, int addr, bool useAddr28);
+void print_word_at_address(char* token, int addr, bool useAddr28);
+void print_dword_at_address(char* token, int addr, bool useAddr28);
+void print_qword_at_address(char* token, int addr, bool useAddr28);
 
 char* get_extension(char* fname)
 {
@@ -227,7 +238,7 @@ void add_to_locals(type_funcinfo *fi, type_localinfo *li)
   while (iter != NULL)
   {
     // insert entry?
-    if (strcmp(iter->name, fi->name) > 0) {
+    if (strcmp(iter->name, fi->name) < 0) {
       if (previter == 0) {
         fi->locals = li;
         fi->locals->next = iter;
@@ -941,7 +952,6 @@ void parse_debug(char* line)
         li->next = NULL;
 
         add_to_locals(cur_func_info, li);
-
       }
     }
   }
@@ -1822,6 +1832,11 @@ void disassemble(bool useAddr28)
   if (autowatch)
     cmdWatches();
 
+  if (autolocals) {
+    cmdLocals();
+    printf("---------------------------------------\n");
+  }
+
   int addr;
   int cnt = 1; // number of lines to disassemble
 
@@ -2003,6 +2018,72 @@ void cmdMCopy(void)
       break;
   }
   printf("\n");
+}
+
+type_funcinfo* find_current_function(int pc)
+{
+  type_funcinfo* previter = 0;
+  type_funcinfo* iter = lstFuncInfo;
+
+  while (iter != NULL) {
+    // printf("%s : $%04X\n", iter->name, iter->addr);
+
+    if (iter->addr > pc)
+    {
+      if (previter == 0 || (iter->addr - pc) < 8)
+        return NULL;
+
+      //printf("FOUND IT!\n");
+      return previter;
+    }
+
+    previter = iter;
+    iter = iter->next;
+  }
+  return NULL;
+}
+
+int get_sptop(void) {
+  mem_data mem = get_mem(0x1c, false);
+  return mem.b[0] + (mem.b[1] << 8);
+}
+
+void cmdLocals(void)
+{
+  // get current pc
+  reg_data reg = get_regs();
+  
+  // assess which function it resides in
+  type_funcinfo* fi = find_current_function(reg.pc);
+  if (fi == NULL)
+    return;
+
+  // iterate over list of locals within function
+  type_localinfo* iter = fi->locals;
+  int sptop = get_sptop();
+  if (iter != NULL)
+    printf("LOCALS:\n");
+  else
+    printf("LOCALS: none found!\n");
+
+  while (iter != NULL) {
+    int addr = sptop + iter->offset;
+    printf("@ $%04X :", addr);
+    if (iter->size == 1)
+      print_byte_at_addr(iter->name, addr, false);
+    else if (iter->size == 2)
+      print_word_at_address(iter->name, addr, false);
+    else if (iter->size == 4)
+      print_dword_at_address(iter->name, addr, false);
+    else {
+      printf(" %s[%d] =\n", iter->name, iter->size);
+      dump(addr, iter->size);
+    }
+
+    // read (sptop-offset) locations of memory to print out local values
+
+    iter = iter->next;
+  }
 }
 
 void cmdDisassemble(void)
@@ -2700,13 +2781,18 @@ int get_sym_value(char* token)
   }
 }
 
+void print_byte_at_addr(char* token, int addr, bool useAddr28)
+{
+  mem_data mem = get_mem(addr, useAddr28);
+
+  printf(" %s: %02X\n", token, mem.b[0]);
+}
+
 void print_byte(char *token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, useAddr28);
-
-  printf(" %s: %02X\n", token, mem.b[0]);
+  print_byte_at_addr(token, addr, useAddr28);
 }
 
 void cmdPrintByte(void)
@@ -2729,13 +2815,18 @@ void cmdPrintMByte(void)
   }
 }
 
+void print_word_at_address(char* token, int addr, bool useAddr28)
+{
+  mem_data mem = get_mem(addr, useAddr28);
+
+  printf(" %s: %02X%02X\n", token, mem.b[1], mem.b[0]);
+}
+
 void print_word(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, useAddr28);
-
-  printf(" %s: %02X%02X\n", token, mem.b[1], mem.b[0]);
+  print_word_at_address(token, addr, useAddr28);
 }
 
 void cmdPrintWord(void)
@@ -2758,13 +2849,18 @@ void cmdPrintMWord(void)
   }
 }
 
+void print_dword_at_address(char* token, int addr, bool useAddr28)
+{
+  mem_data mem = get_mem(addr, useAddr28);
+
+  printf(" %s: %02X%02X%02X%02X\n", token, mem.b[3], mem.b[2], mem.b[1], mem.b[0]);
+}
+
 void print_dword(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, useAddr28);
-
-  printf(" %s: %02X%02X%02X%02X\n", token, mem.b[3], mem.b[2], mem.b[1], mem.b[0]);
+  print_dword_at_address(token, addr, useAddr28);
 }
 
 void cmdPrintDWord(void)
@@ -2787,15 +2883,20 @@ void cmdPrintMDWord(void)
   }
 }
 
-void print_qword(char* token, bool useAddr28)
+void print_qword_at_address(char* token, int addr, bool useAddr28)
 {
-  int addr = get_sym_value(token);
-
   mem_data mem = get_mem(addr, useAddr28);
 
   printf(" %s: %02X%02X%02X%02X%02X%02X%02X%02X\n", token, 
       mem.b[7], mem.b[6], mem.b[5], mem.b[4],
       mem.b[3], mem.b[2], mem.b[1], mem.b[0]);
+}
+
+void print_qword(char* token, bool useAddr28)
+{
+  int addr = get_sym_value(token);
+
+  print_qword_at_address(token, addr, useAddr28);
 }
 
 void cmdPrintQWord(void)
@@ -3225,6 +3326,21 @@ void cmdAutoWatch(void)
     autowatch = false;
 
   printf(" - autowatch is turned %s.\n", autowatch ? "on" : "off");
+}
+
+void cmdAutoLocals(void)
+{
+  char* token = strtok(NULL, " ");
+
+  // if no parameter, then just toggle it
+  if (token == NULL)
+    autolocals = !autolocals;
+  else if (strcmp(token, "1") == 0)
+    autolocals = true;
+  else if (strcmp(token, "0") == 0)
+    autolocals = false;
+
+  printf(" - autolocals is turned %s.\n", autolocals ? "on" : "off");
 }
 
 void cmdPetscii(void)
