@@ -2050,11 +2050,19 @@ int get_sptop(void) {
 
 void cmdLocals(void)
 {
+  int addr;
+
   // get current pc
   reg_data reg = get_regs();
+  addr = reg.pc;
+
+  if (traceframe != 0) {
+    int* addresses = get_backtrace_addresses();
+    addr = addresses[traceframe-1];
+  }
   
   // assess which function it resides in
-  type_funcinfo* fi = find_current_function(reg.pc);
+  type_funcinfo* fi = find_current_function(addr);
   if (fi == NULL)
     return;
 
@@ -2062,9 +2070,9 @@ void cmdLocals(void)
   type_localinfo* iter = fi->locals;
   int sptop = get_sptop();
   if (iter != NULL)
-    printf("LOCALS:\n");
+    printf("LOCALS: %s\n", fi->name);
   else
-    printf("LOCALS: none found!\n");
+    printf("LOCALS: %s\nnone found!\n", fi->name);
 
   while (iter != NULL) {
     int addr = sptop + iter->offset;
