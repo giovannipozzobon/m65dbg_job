@@ -135,6 +135,27 @@ char* get_extension(char* fname)
   return strrchr(fname, '.');
 }
 
+int prior_offset = 0; // to help keep track of stack offsets of local variables within functions
+
+typedef struct tli
+{
+  char* name;
+  int offset;
+  int size;
+  struct tli *next;
+} type_localinfo;
+
+typedef struct tfi
+{
+  char* name;
+  int addr;
+  type_localinfo* locals;
+  struct tfi *next;
+} type_funcinfo;
+
+type_funcinfo* lstFuncInfo = NULL;
+type_funcinfo* cur_func_info = NULL;
+
 typedef struct tfl
 {
   int addr;
@@ -188,6 +209,81 @@ void add_to_offsets_list(type_offsets mo)
       iter->next = mo_new;
       return;
     }
+    iter = iter->next;
+  }
+}
+
+void add_to_locals(type_funcinfo *fi, type_localinfo *li)
+{
+  type_localinfo* previter = 0;
+  type_localinfo* iter = fi->locals;
+
+  if (fi->locals == NULL)
+  {
+    fi->locals = li;
+    return;
+  }
+
+  while (iter != NULL)
+  {
+    // insert entry?
+    if (strcmp(iter->name, fi->name) > 0) {
+      if (previter == 0) {
+        fi->locals = li;
+        fi->locals->next = iter;
+        return;
+      }
+      else {
+        previter->next = li;
+        li->next = iter;
+        return;
+      }
+    }
+    if (iter->next == NULL) {
+      iter->next = li;
+      return;
+    }
+
+    previter = iter;
+    iter = iter->next;
+  }
+}
+
+void add_to_func_list(type_funcinfo *fi)
+{
+  type_funcinfo* previter = 0;
+  type_funcinfo* iter = lstFuncInfo;
+
+  cur_func_info = fi;
+
+  if (lstFuncInfo == NULL)
+  {
+    lstFuncInfo = fi;
+    return;
+  }
+
+  while (iter != NULL)
+  {
+    // insert entry?
+    if (iter->addr > fi->addr)
+    {
+      if (previter == 0) {
+        lstFuncInfo = fi;
+        lstFuncInfo->next = iter;
+        return;
+      }
+      else {
+        previter->next = fi;
+        fi->next = iter;
+        return;
+      }
+    }
+    if (iter->next == NULL) {
+      iter->next = fi;
+      return;
+    }
+
+    previter = iter;
     iter = iter->next;
   }
 }
@@ -795,6 +891,62 @@ char* get_module_string(const char* current_module)
   return 0;
 }
 
+void parse_function(char* line, int addr)
+{
+  char *p = get_nth_token(line, 2);
+  if (p != NULL && strcasecmp(p, ".proc") == 0)
+  {
+    char* p = get_nth_token(line, 3);
+    p[strlen(p)-1] = '\0';
+    type_funcinfo* fi = malloc(sizeof(type_funcinfo));
+    fi->name = strdup(p);
+    fi->addr = addr;
+    fi->locals = NULL;
+    fi->next = NULL;
+    add_to_func_list(fi);
+    prior_offset = 0;
+  }
+}
+
+void parse_debug(char* line)
+{
+  if (cur_func_info == NULL)
+    return;
+
+  char *p1 = get_nth_token(line, 2);
+  if (p1 == NULL)
+    return;
+
+  if (strcasecmp(p1, ".dbg") == 0)
+  {
+    char *p2 = get_nth_token(line, 3);
+    if (p2 == NULL)
+      return;
+
+    if (strcasecmp(p2, "sym,") == 0)
+    {
+      char* type = get_nth_token(line, 6);
+      if (strcasecmp(type, "auto,") == 0)
+      {
+        char* name = get_nth_token(line, 4);
+        name[strlen(name)-2] = '\0';  // trim the end quote and comma
+
+        type_localinfo* li = malloc(sizeof(type_localinfo));
+        li->name = strdup(name+1);  // skip the start quote
+
+        char* offset = get_nth_token(line, 7);
+        li->offset = atoi(offset);
+        li->size = prior_offset - li->offset;
+        prior_offset = li->offset;
+        li->next = NULL;
+
+        add_to_locals(cur_func_info, li);
+
+      }
+    }
+  }
+}
+
 void load_ca65_list(const char* fname, FILE* f)
 {
   static char list_file_name[256];
@@ -861,6 +1013,10 @@ void load_ca65_list(const char* fname, FILE* f)
         addr += get_segment_offset(current_segment);
         addr += get_module_offset(current_module, current_segment);
       }
+
+      parse_function(line, addr);
+
+      parse_debug(line);
 
       //if (strcmp(current_module, "fdisk_fat32.o") == 0 /*&& strcmp(current_segment, "CODE") == 0 */ && addr <= 0x1000)
         //printf("mod=%s:seg=%s : %08X : %s", current_module, current_segment, addr, line);
