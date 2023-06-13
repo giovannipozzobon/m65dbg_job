@@ -40,6 +40,30 @@ typedef struct
   unsigned int b[16];
 } mem_data;
 
+typedef struct
+{
+  int addr;
+  char name[256];
+} rom_chunk;
+
+rom_chunk rom_chunks[] = {
+  { 0x20000, "(C65 DOS chunk 1)" },
+  { 0x22000, "(C65 DOS chunk 2)" },
+  { 0x28000, "(CHARSET-A)" },
+  { 0x2a000, "(C64 BASIC)" },
+  { 0x2c000, "(C65 DOS chunk 3 + C65 KERNAL chunk 1 + CHARSET-C)" },
+  { 0x2e000, "(C64 KERNAL)" },
+  { 0x30000, "(C65 MONITOR)" },
+  { 0x32000, "(C65 BASIC chunk 1)" },
+  { 0x34000, "(C65 BASIC chunk 2)" },
+  { 0x36000, "(C65 BASIC chunk 3)" },
+  { 0x38000, "(C65 BASIC chunk 4)" },
+  { 0x3a000, "(C65 BASIC chunk 5)" },
+  { 0x3c000, "(C65 KERNAL chunk 2 + CHARSET-B)" },
+  { 0x3e000, "(C65 EDITOR + C65 KERNAL chunk 3)" },
+  { 0, "" }
+};
+
 bool outputFlag = true;
 bool continue_mode = false;
 
@@ -131,6 +155,7 @@ type_command_details command_details[] =
   { "mcopy", cmdMCopy, "<src_addr> <dest_addr> <count>", "copy data from source location to destination (28-bit addresses)" },
   { "locals", cmdLocals, NULL, "Print out the values of any local variables within the current c-function (needs gurce's cc65 .list file)" },
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
+  { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -161,6 +186,7 @@ typedef struct tfi
   char* name;
   int addr;
   type_localinfo* locals;
+  int paramsize;
   struct tfi *next;
 } type_funcinfo;
 
@@ -913,6 +939,7 @@ void parse_function(char* line, int addr)
     fi->name = strdup(p);
     fi->addr = addr;
     fi->locals = NULL;
+    fi->paramsize = 0;
     fi->next = NULL;
     add_to_func_list(fi);
     prior_offset = 0;
@@ -950,6 +977,13 @@ void parse_debug(char* line)
         li->size = prior_offset - li->offset;
         prior_offset = li->offset;
         li->next = NULL;
+
+        if (strcmp("__sptop__", li->name) == 0) {
+          free(li->name);
+          cur_func_info->paramsize = li->offset;
+          free(li);
+          return;
+        }
 
         add_to_locals(cur_func_info, li);
       }
@@ -2043,9 +2077,29 @@ type_funcinfo* find_current_function(int pc)
   return NULL;
 }
 
-int get_sptop(void) {
-  mem_data mem = get_mem(0x1c, false);
-  return mem.b[0] + (mem.b[1] << 8);
+int get_sptop(type_localinfo* iter) {
+  mem_data mem = get_mem(0x02, false);
+  int sp = mem.b[0] + (mem.b[1] << 8);
+
+  int* addresses = get_backtrace_addresses();
+  if (traceframe != 0) {
+    for (int k = traceframe; k >=0; k--) {
+      int addr = addresses[k-1];
+      type_funcinfo* fi = find_current_function(addr);
+      if (fi != NULL) {
+        sp += fi->paramsize;
+      }
+    }
+  }
+
+  while (iter != NULL) {
+    if (iter->offset < 0) {
+      sp += iter->size;
+    }
+
+    iter = iter->next;
+  }
+  return sp;
 }
 
 void cmdLocals(void)
@@ -2068,7 +2122,7 @@ void cmdLocals(void)
 
   // iterate over list of locals within function
   type_localinfo* iter = fi->locals;
-  int sptop = get_sptop();
+  int sptop = get_sptop(iter);
   if (iter != NULL)
     printf("LOCALS: %s\n", fi->name);
   else
@@ -3349,6 +3403,81 @@ void cmdAutoLocals(void)
     autolocals = false;
 
   printf(" - autolocals is turned %s.\n", autolocals ? "on" : "off");
+}
+
+char* get_rom_chunk_name(int addr)
+{
+  static char* empty = "";
+
+  for (int k = 0; rom_chunks[k].addr != 0; k++) {
+    if (rom_chunks[k].addr == addr) {
+      return rom_chunks[k].name;
+    }
+  }
+  return empty;
+}
+
+void cmdMapping(void)
+{
+  int reg_01 = peek(0x01);
+  int reg_d030 = peek(0xffd3030);
+
+  reg_data reg = get_regs();
+
+  printf("\n");
+  printf("$D030 register (highest priority)\n");
+  printf("==============\n");
+  if (reg_d030 & 0x08)
+    printf("- $8000 <-- $3,8000 %s\n", get_rom_chunk_name(0x38000));
+  if (reg_d030 & 0x10)
+    printf("- $A000 <-- $3,A000 %s\n", get_rom_chunk_name(0x3a000));
+  if (reg_d030 & 0x20)
+    printf("- $C000 <-- $2,C000 %s\n", get_rom_chunk_name(0x2c000));
+  if (reg_d030 & 0x40)
+    printf("- Selected C65 charset(?)\n");
+  if (reg_d030 & 0x80)
+    printf("- $E000 <-- $3,E000 %s\n", get_rom_chunk_name(0x3e000));
+  printf("\n");
+
+  printf("\"MAP\" mechanism (lower priority)\n");
+  printf("===============\n");
+  int mapl_blocks = reg.mapl >> 12;
+  int mapl_offset = (reg.mapl & 0x0fff) << 8;
+
+  int maph_blocks = reg.maph >> 12;
+  int maph_offset = (reg.maph & 0x0fff) << 8;
+
+  printf("MAPL\n");
+  printf("----\n");
+  for (int k = 0; k < 7; k++) {
+    if (mapl_blocks & (1<<k)) {
+      int offset = mapl_offset + 0x2000 * k;
+      printf("- $%04X <-- $%1X,%04X %s\n", 0x2000 * k,
+         offset >> 16, offset & 0xffff, get_rom_chunk_name(offset));
+    }
+  }
+  printf("\n");
+
+  printf("MAPH\n");
+  printf("----\n");
+  for (int k = 0; k < 7; k++) {
+    if (maph_blocks & (1<<k)) {
+      int offset = maph_offset + 0x8000 + 0x2000 * k;
+      printf("- $%04X <-- $%1X,%04X %s\n", 0x8000 + 0x2000 * k,
+          offset >> 16, offset & 0xffff, get_rom_chunk_name(offset));
+    }
+  }
+  printf("\n");
+
+  printf("$01 register (lowest priority)\n");
+  printf("===========\n");
+  if (reg_01 & 0x01)
+    printf("- $A000 <-- $2,A000 (C64 BASIC)\n");
+  if (!(reg_01 & 0x04))
+    printf("- $D000 <-- $2,D000 (C64 CHARSET)\n");
+  if (reg_01 & 0x02)
+    printf("- $E000 <-- $2,E000 (C64 KERNAL)\n");
+  printf("\n");
 }
 
 void cmdPetscii(void)
