@@ -1967,6 +1967,8 @@ void cmdForwardDis(void)
 
   if (zpos-cnt > 0)
     zpos-=cnt;
+  else
+    zpos=0;
 
   sprintf(s, "dis %04X", zval[zpos]);
   strtok(s, " ");
@@ -1988,6 +1990,8 @@ void cmdBackwardDis(void)
 
   if (zpos+cnt < PCCNT)
     zpos+=cnt;
+  else
+    zpos = PCCNT-1;
 
   sprintf(s, "dis %04X", zval[zpos]);
   strtok(s, " ");
