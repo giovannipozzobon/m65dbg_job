@@ -121,6 +121,7 @@ extern char* type_names[];
 typedef struct we
 {
   type_watch type;
+  bool show_decimal;
   char* name;
   char* param1;
   struct we* next;
