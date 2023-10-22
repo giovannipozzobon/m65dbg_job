@@ -29,3 +29,18 @@ install: m65dbg
 
 clean:
 	rm -f $(OBJECTS) $(EXECUTABLE)
+
+zip: FORCE
+	rm -f m65dbg.zip
+	rm -rf pkg/
+	mkdir pkg
+	cp m65dbg.exe pkg/
+	cp /bin/cygpng16-16.dll pkg/
+	cp /bin/cygwin1.dll pkg/
+	cp /bin/cygreadline7.dll pkg/
+	cp /bin/cygz.dll pkg/
+	cp /bin/cygwin1.dll pkg/
+	cp /bin/cygncursesw-10.dll pkg/
+	7z a m65dbg.zip ./pkg/*
+
+FORCE:
