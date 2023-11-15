@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <math.h>
 #include "commands.h"
 #include "serial.h"
 #include "gs4510.h"
@@ -71,7 +72,7 @@ char outbuf[BUFSIZE] = { 0 };  // the buffer of what command is output to the re
 char inbuf[BUFSIZE] = { 0 }; // the buffer of what is read in from the remote monitor
 
 char* type_names[] = { "BYTE   ", "WORD   ", "DWORD  ", "QWORD  ", "STRING ", "DUMP   ",
-                       "MBYTE  ", "MWORD  ", "MDWORD ", "MQWORD ", "MSTRING", "MDUMP  " };
+                       "MBYTE  ", "MWORD  ", "MDWORD ", "MQWORD ", "MSTRING", "MDUMP  ", "MFLOAT " };
 
 bool autocls = false; // auto-clearscreen flag
 bool autowatch = false; // auto-watch flag
@@ -112,6 +113,7 @@ type_command_details command_details[] =
   { "pmd", cmdPrintMDWord, "<addr28>", "Prints the dword-value of the given 28-bit address" },
   { "pmq", cmdPrintMQWord, "<addr28>", "Prints the qword-value of the given 28-bit address" },
   { "pms", cmdPrintMString, "<addr28>", "Prints the null-terminated string-value found at the given 28-bit address" },
+  { "pmf", cmdPrintMFloat, "<addr28>", "Prints the BASIC float value at the given 28-bit address" },
   { "cls", cmdClearScreen, NULL, "Clears the screen" },
   { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
   { "break", cmdSetBreakpoint, "<addr>", "Sets the hardware breakpoint to the desired address" },
@@ -127,6 +129,7 @@ type_command_details command_details[] =
   { "wmd", cmdWatchMDWord, "<addr28>", "Watches the dword-value of the given 28-bit address" },
   { "wmq", cmdWatchMQWord, "<addr28>", "Watches the qword-value of the given 28-bit address" },
   { "wms", cmdWatchMString, "<addr28>", "Watches the null-terminated string-value found at the given 28-bit address" },
+  { "wmf", cmdWatchMFloat, "<addr28>", "Watches a BASIC float value at the given 28-bit address" },
   { "wmdump", cmdWatchMDump, "<addr28> [<count>]", "Watches an mdump of bytes at the given 28-bit address" },
   { "watches", cmdWatches, NULL, "Lists all watches and their present values" },
   { "wdel", cmdDeleteWatch, "<watch#>/all", "Deletes the watch number specified (use 'watches' command to get a list of existing watch numbers)" },
@@ -3014,6 +3017,24 @@ void print_qword(char* token, bool useAddr28, bool show_decimal)
   print_qword_at_address(token, addr, useAddr28, show_decimal);
 }
 
+void print_float(char* token, bool useAddr28)
+{
+  int addr = get_sym_value(token);
+
+  mem_data mem = get_mem(addr, useAddr28);
+
+  int exp = mem.b[0] - 128;
+  int sign = mem.b[1] >= 128 ? -1 : 1;
+  double mantissa = sign * ((mem.b[1] | 0x80) << 24) + (mem.b[2] << 16) + (mem.b[3] >> 8) + mem.b[4];
+  mantissa /= pow(2, 32);
+  double val = mantissa * pow(2, exp);
+  if (mem.b[0] == 0) {
+    val = 0;
+  }
+
+  printf(" %s: %g\n", token, val);
+}
+
 void cmdPrintQWord(void)
 {
   bool show_decimal = false;
@@ -3126,6 +3147,16 @@ void cmdPrintMString(void)
   if (token != NULL)
   {
     print_string(token, true);
+  }
+}
+
+void cmdPrintMFloat(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL)
+  {
+    print_float(token, true);
   }
 }
 
@@ -3374,6 +3405,11 @@ void cmdWatchMString(void)
   cmd_watch(TYPE_MSTRING);
 }
 
+void cmdWatchMFloat(void)
+{
+  cmd_watch(TYPE_MFLOAT);
+}
+
 void cmdWatchMDump(void)
 {
   cmd_watch(TYPE_MDUMP);
@@ -3407,6 +3443,7 @@ void cmdWatches(void)
       case TYPE_MQWORD:  print_qword(iter->name, true, iter->show_decimal);  break;
       case TYPE_MSTRING: print_string(iter->name, true); break;
       case TYPE_MDUMP:   print_mdump(iter);        break;
+      case TYPE_MFLOAT:  print_float(iter->name, true); break;
     }
 
     iter = iter->next;
