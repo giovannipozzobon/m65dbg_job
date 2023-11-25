@@ -23,6 +23,7 @@ void cmdPrintWord(void);
 void cmdPrintDWord(void);
 void cmdPrintQWord(void);
 void cmdPrintString(void);
+void cmdPrintBasicVar(void);
 void cmdPrintMByte(void);
 void cmdPrintMWord(void);
 void cmdPrintMDWord(void);

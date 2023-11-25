@@ -108,6 +108,7 @@ type_command_details command_details[] =
   { "pd", cmdPrintDWord, "<addr>", "Prints the dword-value of the given address" },
   { "pq", cmdPrintQWord, "<addr>", "Prints the qword-value of the given address" },
   { "ps", cmdPrintString, "<addr>", "Prints the null-terminated string-value found at the given address" },
+  { "pbas", cmdPrintBasicVar, "[<varname>]", "Print the value of specified basic var. If none given, print value of all vars." },
   { "pmb", cmdPrintMByte, "<addr28>", "Prints the byte-value of the given 28-bit address" },
   { "pmw", cmdPrintMWord, "<addr28>", "Prints the word-value of the given 28-bit address" },
   { "pmd", cmdPrintMDWord, "<addr28>", "Prints the dword-value of the given 28-bit address" },
@@ -3017,23 +3018,36 @@ void print_qword(char* token, bool useAddr28, bool show_decimal)
   print_qword_at_address(token, addr, useAddr28, show_decimal);
 }
 
+double get_float_from_int_array(unsigned int* arr)
+{
+  int exp = arr[0] - 128;
+  int sign = arr[1] >= 128 ? -1 : 1;
+  double mantissa = sign * ((arr[1] | 0x80) << 24) + (arr[2] << 16) + (arr[3] >> 8) + arr[4];
+  mantissa /= pow(2, 32);
+  double val = mantissa * pow(2, exp);
+  if (arr[0] == 0) {
+    val = 0;
+  }
+
+  return val;
+}
+
+double get_float_at_addr(int addr, bool useAddr28)
+{
+  mem_data mem = get_mem(addr, useAddr28);
+
+  return get_float_from_int_array(mem.b);
+}
+
 void print_float(char* token, bool useAddr28)
 {
   int addr = get_sym_value(token);
 
-  mem_data mem = get_mem(addr, useAddr28);
-
-  int exp = mem.b[0] - 128;
-  int sign = mem.b[1] >= 128 ? -1 : 1;
-  double mantissa = sign * ((mem.b[1] | 0x80) << 24) + (mem.b[2] << 16) + (mem.b[3] >> 8) + mem.b[4];
-  mantissa /= pow(2, 32);
-  double val = mantissa * pow(2, exp);
-  if (mem.b[0] == 0) {
-    val = 0;
-  }
+  double val = get_float_at_addr(addr, useAddr28);
 
   printf(" %s: %g\n", token, val);
 }
+
 
 void cmdPrintQWord(void)
 {
@@ -3067,7 +3081,7 @@ void cmdPrintMQWord(void)
   }
 }
 
-void print_string(char* token, bool useAddr28)
+void print_str_maxlen(char* token, int maxlen, bool useAddr28)
 {
   int addr = get_sym_value(token);
   static char string[2048] = { 0 };
@@ -3089,6 +3103,10 @@ void print_string(char* token, bool useAddr28)
         string[cnt++] = '.';
         mem.b[k] = 0;
       }
+      if (cnt == maxlen)
+      {
+        mem.b[k] = 0;
+      }
 
       string[cnt] = mem.b[k];
 
@@ -3100,6 +3118,122 @@ void print_string(char* token, bool useAddr28)
       cnt++;
     }
   }
+}
+
+void print_string(char* token, bool useAddr28)
+{
+  print_str_maxlen(token, -1, useAddr28);
+}
+
+
+unsigned int mem_0f700[2100];
+
+void scan_single_letter_vars(void)
+{
+  printf("single letter vars:\n");
+  printf("------------------:\n");
+  for (int k = 'a'; k <= 'z'; k++)
+  {
+    int byte_val = mem_0f700[0xfd00 - 0xf700 + (k-'a')];
+    int int_val  = mem_0f700[0xfd20 - 0xf700 + (k-'a')*2] +
+                   (mem_0f700[0xfd20 - 0xf700 + (k-'a')*2 + 1] << 8);
+
+    int str_len  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3];
+    int str_ptr  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3 + 1] +
+                   (mem_0f700[0xfd60 - 0xf700 + (k-'a')*3 + 2] << 8);
+    double float_val = get_float_at_addr(0xfe00 + (k-'a')*5, true);
+    printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k, byte_val, k, int_val, k, float_val, k, str_len);
+    char sval[10];
+    sprintf(sval, "%06X", 0x10000 + str_ptr);
+    print_str_maxlen(sval, str_len, 1);
+  }
+  printf("\n");
+}
+
+void scan_two_letter_vars(void)
+{
+  printf("two letter vars:\n");
+  printf("---------------:\n");
+
+  int addr = 0x0f700;
+  int maxaddr = 0x0fd00;
+  int cnt = 0;
+  while(addr + cnt < maxaddr)
+  {
+    char varnam1 = (char)mem_0f700[cnt + 0];
+    char varnam2 = (char)mem_0f700[cnt + 1];
+    char vartype = (char)mem_0f700[cnt + 2];
+
+    if (varnam1 == '\0' && varnam2 == '\0')
+      break;
+
+    if (vartype == '&') {
+      int byte_val = mem_0f700[cnt + 3];
+      printf("%c%c& = %d\n", varnam1, varnam2, byte_val);
+    }
+
+    if (vartype == '%') {
+      int int_val  = mem_0f700[cnt + 3] +
+                     (mem_0f700[cnt + 4] << 8);
+      printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
+    }
+
+    if (vartype == '"') {
+      double float_val = get_float_from_int_array(&mem_0f700[cnt + 3]);
+      printf("%c%c = %g\n", varnam1, varnam2, float_val);
+    }
+
+    if (vartype == '$') {
+    int str_len  = mem_0f700[cnt + 3];
+    int str_ptr  = mem_0f700[cnt + 4] +
+                   (mem_0f700[cnt + 5] << 8);
+      printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
+      char sval[10];
+      sprintf(sval, "%06X", 0x10000 + str_ptr);
+      print_str_maxlen(sval, str_len, 1);
+    }
+
+    cnt += 8;
+  }
+
+  printf("\n");
+}
+
+void read_scalar_var_mem(void)
+{
+  int addr = 0x0f700;
+  int maxaddr = 0x0ff00;
+  int cnt = 0;
+  while (addr + cnt < maxaddr)
+  {
+    // get memory at current pc
+    mem_data* multimem = get_mem28array(addr + cnt);
+
+    for (int line = 0; line < 16; line++)
+    {
+      mem_data* mem = &multimem[line];
+
+      for (int k = 0; k < 16; k++)
+      {
+        mem_0f700[cnt] = mem->b[k];
+
+        cnt++;
+
+        if (addr + cnt >= maxaddr)
+          break;
+      }
+
+      if (addr + cnt >= maxaddr)
+        break;
+    }
+  }
+}
+
+void print_basic_var(char* token)
+{
+  read_scalar_var_mem();
+  scan_single_letter_vars();
+  scan_two_letter_vars();
 }
 
 void print_dump(type_watch_entry* watch)
@@ -3138,6 +3272,12 @@ void cmdPrintString(void)
   {
     print_string(token, false);
   }
+}
+
+void cmdPrintBasicVar(void)
+{
+  char* token = strtok(NULL, " ");
+  print_basic_var(token);
 }
 
 void cmdPrintMString(void)
