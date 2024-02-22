@@ -66,7 +66,7 @@ void parse_command(void)
   strcpy(strInput, outbuf);
 
   // tokenise command
-  token = strtok(strInput, " ");
+  token = strtok(strInput, " [");
 
   // test for special commands provided by the m65dbg app
   if (!handled)
@@ -294,6 +294,7 @@ int main(int argc, char** argv)
 
     if (!strInput ||
         strcmp(strInput, "exit") == 0 ||
+        strcmp(strInput, "quit") == 0 ||
         strcmp(strInput, "x") == 0 ||
         strcmp(strInput, "q") == 0)
       return 0;

@@ -160,6 +160,7 @@ type_command_details command_details[] =
   { "locals", cmdLocals, NULL, "Print out the values of any local variables within the current c-function (needs gurce's cc65 .list file)" },
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
+  { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -169,6 +170,7 @@ void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal
 void print_word_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_dword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_qword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
+char* toBinaryString(int val);
 
 char* get_extension(char* fname)
 {
@@ -1439,6 +1441,202 @@ mem_data* get_mem28array(int addr)
 
   return multimem;
 }
+
+int parse_indices(char* str, int* x, int* y)
+{
+  int state = 0;
+  char s[100] = "";
+  int i=0;
+
+  for (int k = 0; k < strlen(str); k++)
+  {
+    switch(state)
+    {
+      case 0: // expect [
+        if (str[k] == '[')
+        {
+          state = 1;
+        }
+        else if (str[k] != ' ')
+          return 0;
+        break;
+
+        // - - - -
+
+      case 1: // expect numeric
+        if (str[k] >= '0' && str[k] <= '9') {
+          s[i] = str[k];
+          i++;
+          s[i] = '\0';
+        }
+        else if (str[k] == ']') {
+          *y = atoi(s);
+          i=0;
+          s[i] = '\0';
+          state = 2;
+        }
+        else if (str[k] != ' ')
+          return 0;
+        break;
+
+        // - - - -
+        
+      case 2:
+        if (str[k] == '[')
+        {
+          state = 3;
+        }
+        else if (str[k] != ' ')
+          return 0;
+        break;
+
+        // - - - -
+
+      case 3: // expect numeric
+        if (str[k] >= '0' && str[k] <= '9') {
+          s[i] = str[k];
+          i++;
+          s[i] = '\0';
+        }
+        else if (str[k] == ']') {
+          *x = atoi(s);
+          i=0;
+          s[i] = '\0';
+          return 1;
+        }
+        else if (str[k] != ' ')
+          return 0;
+        break;
+    }
+  }
+
+  if (state == 2 && i == 0)
+    return 2; // show entire row details
+
+  return 0;
+}
+
+void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int x, int y)
+{
+  printf("seam[%d][%d]:\n", y, x);
+
+  // read screen word
+  int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+
+  mem_data* multimem = get_mem28array(scr_addr);
+  int scr0 = multimem->b[0];
+  int scr1 = multimem->b[1];
+  multimem = get_mem28array(clr_addr);
+  int clr0 = multimem->b[0];
+  int clr1 = multimem->b[1];
+  printf("  $%08X : scr0 = $%02X : %%%s\n", scr_addr+0, scr0, toBinaryString(scr0));
+  printf("  $%08X : scr1 = $%02X : %%%s\n", scr_addr+1, scr1, toBinaryString(scr1));
+  printf("  $%08X : clr0 = $%02X : %%%s\n", clr_addr+0, clr0, toBinaryString(clr0));
+  printf("  $%08X : clr1 = $%02X : %%%s\n", clr_addr+1, clr1, toBinaryString(clr1));
+  
+  // check if GOTOX is SET
+  if (clr0 & 0x10) {
+    printf("GOTOX is SET\n");
+    int goto_x = scr0 + ((scr1 & 0x01) << 8);
+    if (scr1 & 0x02) // highest bit is a sign bit
+      goto_x -= 512;
+    printf("  .goto_x = %d\n", goto_x);
+    int fcm_yoffs = scr1 >> 5;
+    printf("  .fcm_yoffs = %d\n", fcm_yoffs);
+    int transparent_flag = clr0 & 0x80 ? 1 : 0;
+    int background_flag = clr0 & 0x40 ? 1 : 0;
+    int rowmask_flag = clr0 & 0x08 ? 1 : 0;
+    int foreground_flag = clr0 & 0x04 ? 1 : 0;
+    printf("  .transparent_flag = %d\n", transparent_flag);
+    printf("  .background_flag = %d\n", background_flag);
+    printf("  .rowmask_flag = %d\n", rowmask_flag);
+    printf("  .foreground_flag = %d\n", foreground_flag); 
+
+    printf("  .rowmask = %%%s\n", toBinaryString(clr1));
+  }
+  // else GOTOX is CLEAR
+  else {
+    printf("GOTOX is CLEAR\n");
+    int chrnum = scr0 + ( (scr1 & 0x1f) << 8);
+    printf("  .char_number = %d ($%04X)\n", chrnum, chrnum);
+    int rhs_trim = ((scr1 & 0xe0) >> 5) + ((clr0 & 0x04) << 1);
+    printf("  .rhs_trim = %d\n", rhs_trim);
+    int vert_flip = (clr0 & 0x80) ? 1 : 0;
+    int horz_flip = (clr0 & 0x40) ? 1 : 0;
+    int alpha_mode = (clr0 & 0x20) ? 1 : 0;
+    int ncm_flag = (clr0 & 0x08) ? 1 : 0;
+    printf("  .vert_flip = %d\n", vert_flip);
+    printf("  .horz_flip = %d\n", horz_flip);
+    printf("  .alpha_mode = %d\n", alpha_mode);
+    printf("  .ncm_flag = %d\n", ncm_flag);
+
+    int extra_clr = 0;
+    if (mcm_flag) {
+      extra_clr = (clr1 & 0xf0);
+      printf("MCM: extra_clr = $%02X\n", extra_clr);
+    }
+    else if (ext_attrib_flag) {
+      int underline = (clr1 & 0x80) ? 1 : 0;
+      int bold = (clr1 & 0x40) ? 1 : 0;
+      int reverse = (clr1 & 0x20) ? 1 : 0;
+      int blink = (clr1 & 0x10) ? 1 : 0;
+      printf("EXT_ATTR: underline=%d, bold=%d, reverse=%d, blink=%d\n",
+          underline, bold, reverse, blink);
+      if (bold && reverse)
+        printf("  (bold+reverse = alt. palette)\n");
+    }
+    int clr = clr1 & 0x0f;
+    printf("clr = $%02X\n", clr);
+  }
+  printf("\n");
+}
+
+void cmdSeam(void)
+{
+  // get screen ram address at $D060-D063
+  mem_data* multimem = get_mem28array(0xffd305e);
+  int addr = multimem->b[2] + (multimem->b[3] << 8) + (multimem->b[4] << 16)
+    + ( (multimem->b[5] & 0x0f) << 24);
+  printf("$D060-$D063.0-3: screen address = $%08X\n", addr);
+  int chars_per_row = multimem->b[0] + ( (multimem->b[5] & 0x30) << 4);
+  printf("$D05E+$D063.4-5: chars per row = %d\n", chars_per_row);
+
+  int reg_d054 = peek(0xffd3054);
+  int chr16 = reg_d054 & 1;
+  int fclrlo = reg_d054 & 2 ? 1 : 0;
+  int fclrhi = reg_d054 & 4 ? 1 : 0;
+  printf("$D054.0: CHR16 = %d\n", chr16);
+  printf("$D054.1: FCLRLO = %d\n", fclrlo);
+  printf("$D054.2: FCLRHI = %d\n", fclrhi);
+
+  int mcm_flag = (peek(0xffd3016) & 0x10) ? 1 : 0;
+  printf("$D016.4: mcm_flag = %d\n", mcm_flag);
+  int ext_attrib_flag = (peek(0xffd3031) & 0x20) ? 1 : 0;
+  printf("$D031.5: ext_attrib_flag = %d\n", ext_attrib_flag);
+  printf("\n");
+
+  char* str = &outbuf[4]; // read the remainder of the string
+  int x, y;
+  int ret = parse_indices(str, &x, &y);
+  if (!str || !ret)
+  {
+    printf("ERROR: Could not parse screen array indices!\n");
+    return;
+  }
+
+  if (ret == 1)
+    print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+
+  if (ret == 2)
+  {
+    for (x = 0; x < chars_per_row; x++)
+    {
+      print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+    }
+  }
+}
+
 
 void cmd_poke(int size)
 {
