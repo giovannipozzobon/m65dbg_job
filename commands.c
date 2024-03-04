@@ -3326,8 +3326,26 @@ void print_string(char* token, bool useAddr28)
 
 unsigned int mem_0f700[2100];
 
+void add_symbol_if_not_exist(char* name, int addr)
+{
+  char sval[10];
+  sprintf(sval,"%04X", addr);
+
+  type_symmap_entry* sme = find_in_symmap(name);
+  if (sme == NULL)
+  {
+      // grab a new symbol name?
+      type_symmap_entry sme_new;
+      sme_new.addr = addr;
+      sme_new.sval = sval;
+      sme_new.symbol = name;
+      add_to_symmap(sme_new);
+  }
+}
+
 void scan_single_letter_vars(void)
 {
+  char name[5];
   printf("single letter vars:\n");
   printf("------------------:\n");
   for (int k = 'a'; k <= 'z'; k++)
@@ -3339,17 +3357,29 @@ void scan_single_letter_vars(void)
     int str_len  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3];
     int str_ptr  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3 + 1] +
                    (mem_0f700[0xfd60 - 0xf700 + (k-'a')*3 + 2] << 8);
+
     double float_val = get_float_at_addr(0xfe00 + (k-'a')*5, true);
-    printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k, byte_val, k, int_val, k, float_val, k, str_len);
+
+    printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k-32, byte_val, k-32, int_val, k-32, float_val, k-32, str_len);
     char sval[10];
     sprintf(sval, "%06X", 0x10000 + str_ptr);
     print_str_maxlen(sval, str_len, 1);
+
+    sprintf(name, "~%c&", k-32);
+    add_symbol_if_not_exist(name, 0xfd00 + (k-'a'));
+    sprintf(name, "~%c%%", k-32);
+    add_symbol_if_not_exist(name, 0xfd20 + (k-'a')*2);
+    sprintf(name, "~%c$", k-32);
+    add_symbol_if_not_exist(name, 0xfd60 + (k-'a')*3);
+    sprintf(name, "~%c", k-32);
+    add_symbol_if_not_exist(name, 0xfe00 + (k-'a')*5);
   }
   printf("\n");
 }
 
 void scan_two_letter_vars(void)
 {
+  char name[5];
   printf("two letter vars:\n");
   printf("---------------:\n");
 
@@ -3366,25 +3396,37 @@ void scan_two_letter_vars(void)
       break;
 
     if (vartype == '&') {
+      sprintf(name, "~%c%c&", varnam1, varnam2);
+      add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
+
       int byte_val = mem_0f700[cnt + 3];
       printf("%c%c& = %d\n", varnam1, varnam2, byte_val);
     }
 
     if (vartype == '%') {
+      sprintf(name, "~%c%c%%", varnam1, varnam2);
+      add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
+
       int int_val  = mem_0f700[cnt + 3] +
                      (mem_0f700[cnt + 4] << 8);
       printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
     }
 
     if (vartype == '"') {
+      sprintf(name, "~%c%c", varnam1, varnam2);
+      add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
+
       double float_val = get_float_from_int_array(&mem_0f700[cnt + 3]);
       printf("%c%c = %g\n", varnam1, varnam2, float_val);
     }
 
     if (vartype == '$') {
-    int str_len  = mem_0f700[cnt + 3];
-    int str_ptr  = mem_0f700[cnt + 4] +
-                   (mem_0f700[cnt + 5] << 8);
+      sprintf(name, "~%c%c$", varnam1, varnam2);
+      add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
+
+      int str_len  = mem_0f700[cnt + 3];
+      int str_ptr  = mem_0f700[cnt + 4] +
+                     (mem_0f700[cnt + 5] << 8);
       printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
       char sval[10];
       sprintf(sval, "%06X", 0x10000 + str_ptr);
