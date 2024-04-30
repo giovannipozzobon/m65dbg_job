@@ -3220,8 +3220,9 @@ double get_float_from_int_array(unsigned int* arr)
 {
   int exp = arr[0] - 128;
   int sign = arr[1] >= 128 ? -1 : 1;
-  double mantissa = sign * ((arr[1] | 0x80) << 24) + (arr[2] << 16) + (arr[3] >> 8) + arr[4];
+  double mantissa = ((arr[1] | 0x80) << 24) + (arr[2] << 16) + (arr[3] >> 8) + arr[4];
   mantissa /= pow(2, 32);
+  mantissa *= sign;
   double val = mantissa * pow(2, exp);
   if (arr[0] == 0) {
     val = 0;
