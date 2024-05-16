@@ -202,6 +202,7 @@ type_funcinfo* cur_func_info = NULL;
 typedef struct tfl
 {
   int addr;
+  int lastaddr;
   char* file;
   char* module;
   int lineno;
@@ -331,7 +332,7 @@ void add_to_func_list(type_funcinfo *fi)
   }
 }
 
-void add_to_list(type_fileloc fl)
+type_fileloc* add_to_list(type_fileloc fl)
 {
   type_fileloc* iter = lstFileLoc;
 
@@ -340,11 +341,12 @@ void add_to_list(type_fileloc fl)
   {
     lstFileLoc = malloc(sizeof(type_fileloc));
     lstFileLoc->addr = fl.addr;
+    lstFileLoc->lastaddr = fl.lastaddr;
     lstFileLoc->file = strdup(fl.file);
     lstFileLoc->lineno = fl.lineno;
     lstFileLoc->module = fl.module;
     lstFileLoc->next = NULL;
-    return;
+    return lstFileLoc;
   }
 
   while (iter != NULL)
@@ -354,41 +356,46 @@ void add_to_list(type_fileloc fl)
     {
       iter->file = strdup(fl.file);
       iter->lineno = fl.lineno;
-      return;
+      return iter;
     }
     // insert entry?
     if (iter->addr > fl.addr)
     {
       type_fileloc* flcpy = malloc(sizeof(type_fileloc));
       flcpy->addr = iter->addr;
+      flcpy->addr = iter->lastaddr;
       flcpy->file = iter->file;
       flcpy->lineno = iter->lineno;
       flcpy->module = iter->module;
       flcpy->next = iter->next;
 
       iter->addr = fl.addr;
+      iter->lastaddr = fl.lastaddr;
       iter->file = strdup(fl.file);
       iter->lineno = fl.lineno;
       iter->module = fl.module;
       iter->next = flcpy;
-      return;
+      return iter;
     }
     // add to end?
     if (iter->next == NULL)
     {
       type_fileloc* flnew = malloc(sizeof(type_fileloc));
       flnew->addr = fl.addr;
+      flnew->lastaddr = fl.lastaddr;
       flnew->file = strdup(fl.file);
       flnew->lineno = fl.lineno;
       flnew->module = fl.module;
       flnew->next = NULL;
 
       iter->next = flnew;
-      return;
+      return flnew;
     }
 
     iter = iter->next;
   }
+  
+  return NULL;
 }
 
 void add_to_symmap(type_symmap_entry sme)
@@ -484,6 +491,9 @@ type_fileloc* find_in_list(int addr)
   {
     //printf("%s : addr=$%04X : line=%d\n", iter->file, iter->addr, iter->lineno);
     if (iter->addr == addr)
+      return iter;
+
+    if (iter->lastaddr != 0 && (iter->addr < addr && addr <= iter->lastaddr))
       return iter;
 
     iter = iter->next;
@@ -1073,6 +1083,7 @@ void load_ca65_list(const char* fname, FILE* f)
         //printf("mod=%s:seg=%s : %08X : %s", current_module, current_segment, addr, line);
       type_fileloc fl = { 0 };
       fl.addr = addr;
+      fl.lastaddr = 0;
       fl.file = list_file_name;
       fl.module = cmod;
       fl.lineno = lineno;
@@ -1125,6 +1136,7 @@ void load_list(char* fname)
       //printf("%04X : %s:%d\n", addr, file, lineno);
       type_fileloc fl = { 0 };
       fl.addr = addr;
+      fl.lastaddr = 0;
       fl.file = file;
       fl.lineno = lineno;
       fl.module = NULL;
@@ -1168,6 +1180,7 @@ void load_bsa_list(char* fname)
         int addr;
         sscanf(line, "%X", &addr);
         fl.addr = addr;
+        fl.lastaddr = 0;
         fl.file = fname;
         fl.lineno = lineno;
         fl.module = NULL;
@@ -1248,6 +1261,28 @@ bool is_hex(const char* str)
   return true;
 }
 
+bool is_hexarray(const char* str)
+{
+  char c;
+  int dotcnt = 0;
+  for (int k = 0; k < strlen(str); k++)
+  {
+    c = str[k];
+    if ((c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || c == '.') {
+      if (c == '.') {
+        dotcnt++;
+        if (dotcnt == 3)
+          return true;
+      }
+      continue;
+    }
+    else
+      return false;
+  }
+
+  return false;
+}
+
 void load_acme_list(char* fname)
 {
   FILE* f = fopen(fname, "rt");
@@ -1256,6 +1291,9 @@ void load_acme_list(char* fname)
   int lineno, memaddr;
   char val1[256];
   char val2[256];
+
+  bool priorWasByteArray = false;
+  type_fileloc *prior_fl = NULL;
 
   while (!feof(f))
   {
@@ -1272,14 +1310,24 @@ void load_acme_list(char* fname)
     {
       if (sscanf(line, "%d %s %s", &lineno, val1, val2) == 3)
       {
-        if (is_hex(val1) && is_hex(val2))
+        if (is_hex(val1) && (is_hex(val2) || is_hexarray(val2)))
         {
           sscanf(val1, "%04X", &memaddr);
+
+          if (priorWasByteArray) {
+            prior_fl->lastaddr = memaddr-1;
+            priorWasByteArray = false;
+          }
+
           type_fileloc fl = { 0 };
           fl.addr = memaddr;
+          fl.lastaddr = 0;
           fl.file = curfile;
           fl.lineno = lineno;
-          add_to_list(fl);
+          prior_fl = add_to_list(fl);
+
+          if (is_hexarray(val2))
+            priorWasByteArray = true;
         }
       }
     }
@@ -3352,8 +3400,8 @@ void scan_single_letter_vars(void)
   for (int k = 'a'; k <= 'z'; k++)
   {
     int byte_val = mem_0f700[0xfd00 - 0xf700 + (k-'a')];
-    int int_val  = mem_0f700[0xfd20 - 0xf700 + (k-'a')*2] +
-                   (mem_0f700[0xfd20 - 0xf700 + (k-'a')*2 + 1] << 8);
+    int int_val  = (mem_0f700[0xfd20 - 0xf700 + (k-'a')*2] << 8) +
+                   mem_0f700[0xfd20 - 0xf700 + (k-'a')*2 + 1];
 
     int str_len  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3];
     int str_ptr  = mem_0f700[0xfd60 - 0xf700 + (k-'a')*3 + 1] +
