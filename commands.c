@@ -3456,8 +3456,8 @@ void scan_two_letter_vars(void)
       sprintf(name, "~%c%c%%", varnam1, varnam2);
       add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
 
-      int int_val  = mem_0f700[cnt + 3] +
-                     (mem_0f700[cnt + 4] << 8);
+      int int_val  = (mem_0f700[cnt + 3] << 8) +
+                     mem_0f700[cnt + 4];
       printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
     }
 
