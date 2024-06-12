@@ -76,6 +76,7 @@ void cmdLocals(void);
 void cmdAutoLocals(void);
 void cmdMapping(void);
 void cmdSeam(void);
+void cmdBasicList(void);
 int doOneShotAssembly(char* strCommand);
 int  cmdGetCmdCount(void);
 char* cmdGetCmdName(int idx);

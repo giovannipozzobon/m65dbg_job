@@ -161,6 +161,7 @@ type_command_details command_details[] =
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
+  { "blist", cmdBasicList, "list the current basic program" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1682,6 +1683,184 @@ void cmdSeam(void)
     {
       print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
     }
+  }
+}
+
+static mem_data* mmem = NULL;
+
+int get_mm_byte(int addr)
+{
+  if (mmem == NULL || addr < mmem[0].addr || addr >= mmem[15].addr + 0x10) {
+    mmem = get_mem28array(addr);
+  }
+  int chunk = (addr - mmem[0].addr) / 16;
+  int idx = (addr - mmem[0].addr) % 16;
+  return mmem[chunk].b[idx];
+}
+
+int get_mm_word(int addr)
+{
+  return get_mm_byte(addr) + (get_mm_byte(addr+1) << 8);
+}
+
+char mapCmds[128][12] =
+{
+  // 0x00 - 0x0f
+  "", "", "BANK", "FILTER", "PLAY", "TEMPO", "MOVSPR", "SPRITE", "SPRCOLOR", "RREG", "ENVELOPE", "SLEEP", "CATALOG", "DOPEN", "APPEND", "DCLOSE",
+  // 0x10 - 0x1f
+  "BSAVE", "BLOAD", "RECORD", "CONCAT", "DVERIFY", "DCLEAR", "SPRSAV", "COLLISION", "BEGIN", "BEND", "WINDOW", "BOOT", "FREAD#", "WPOKE", "FWRITE#", "DMA",
+  // 0x20 - 0x2f
+  " ", "EDMA", " ", "MEM", "OFF", "FAST", "SPEED", "TYPE", "BVERIFY", "ECTORY", "ERASE", "FIND", "CHANGE", "SET", "SCREEN", "POLYGON",
+  // 0x30 - 0x3f
+  "ELLIPSE", "VIEWPORT", "GCOPY", "PEN", "PALETTE", "DMODE", "DPAT", "FORMAT", "TURBO", "FOREGROUND", " ", "BACKGROUND", "BORDER", "HIGHLIGHT", "MOUSE", "RMOUSE",
+  // 0x40 - 0x4f
+  "DISK", "CURSOR", "RCURSOR", "LOADIFF", "SAVEIFF", "EDIT", "FONT", "FGOTO", "FGOSUB", "MOUNT", "FREEZER", "CHDIR", "DOT", "INFO", "BIT", "UNLOCK",
+  // 0x50 - 0x5f
+  "LOCK", "MKDIR", "<<", ">>", "VSYNC", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x60 - 0x6f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x70 - 0x7f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+};
+
+char mapPetscii[256][12] =
+{
+  // 0x00 - 0x0f
+  "{0x00}", "{alt-palette}", "{underline-on}", "{0x03}", "{default-palette}", "{white}", "{0x06}", "{bell}", "{0x08}", "{tab}", "{linefeed}", "{disable-shift-mega}", "{enable-shift-mega}", "{return}", "{lower-case}", "{flash-on}",
+  // 0x10 - 0x1f
+  "{f9}", "{down}", "{reverse-on}", "{clrhome}", "{instdel}", "{f10}", "{f11}", "{f12}", "{toggle-tab}", "{f13}", "{f14}", "{escape}", "{red}", "{right}", "{green}", "{blue}",
+  // 0x20 - 0x2f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x30 - 0x3f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x40 - 0x4f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x50 - 0x5f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x60 - 0x6f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x70 - 0x7f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+
+  // 0x80 - 0x8f
+  "{?}", "{orange}", "{underline-off}", "{shift-runstop}", "{help}", "{f1}", "{f3}", "{f5}", "{f7}", "{f2}", "{f4}", "{f6}", "{f8}", "{shift-return}", "{uppercase}", "{flash-off}",
+  // 0x90 - 0x9f
+  "{black}", "{up}", "{reverse-off}", "{shift-clrhome}", "{shift-instdel}", "{brown}", "{pink}", "{dk-grey}", "{grey}", "{lt-green}", "{lt-blue}", "{lt-grey}", "{purple}", "{left}", "{yellow}", "{cyan}",
+  // 0xa0 - 0xaf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xb0 - 0xbf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xc0 - 0xcf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xd0 - 0xdf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xe0 - 0xef
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xf0 - 0xff
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+};
+
+char mapBasTok[256][12] =
+{
+  // 0x00 - 0x0f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x10 - 0x1f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x20 - 0x2f
+  " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/",
+  // 0x30 - 0x3f
+  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":", ";", "<", "=", ">", "?",
+  // 0x40 - 0x4f
+  "", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+  // 0x50 - 0x5f
+  "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "[", "{pound}", "]", "{upchr}", "{leftchr}",
+  // 0x60 - 0x6f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x70 - 0x7f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x80 - 0x8f
+  "END", "FOR", "NEXT", "DATA", "INPUT#", "INPUT", "DIM", "READ", "LET", "GOTO", "RUN", "IF", "RESTORE", "GOSUB", "RETURN", "REM",
+  // 0x90 - 0x9f
+  "STOP", "ON", "WAIT", "LOAD", "SAVE", "VERIFY", "DEF", "POKE", "PRINT#", "PRINT", "CONT", "LIST", "CLR", "CMD", "SYS", "OPEN",
+  // 0xa0 - 0xaf
+  "CLOSE", "GET", "NEW", "TAB(", "TO", "FN", "SPC(", "THEN", "NOT", "STEP", "+", "-", "*", "/", "^", "AND",
+  // 0xb0 - 0xbf
+  "OR", ">", "=", "<", "SGN", "INT", "ABS", "USR", "FRE", "POS", "SQR", "RND", "LOG", "EXP", "COS", "SIN",
+  // 0xc0 - 0xcf
+  "TAN", "ATN", "PEEK", "LEN", "STR$", "VAL", "ASC", "CHR$", "LEFT$", "RIGHT$", "MID$", "GO", "RGRAPHIC", "RCOLOR", "", "JOY",
+  // 0xd0 - 0xdf
+  "RPEN", "DEC", "HEX$", "ERR$", "INSTR", "ELSE", "RESUME", "TRAP", "TRON", "TROFF", "SOUND", "VOL", "AUTO", "IMPORT", "GRAPHIC", "PAINT",
+  // 0xe0 - 0xef
+  "CHAR", "BOX", "CIRCLE", "PASTE", "CUT", "LINE", "MERGE", "COLOR", "SCNCLR", "XOR", "HELP", "DO", "LOOP", "EXIT", "DIR", "DSAVE",
+  // 0xf0 - 0xff
+  "DLOAD", "HEADER", "SCRATCH", "COLLECT", "COPY", "RENAME", "BACKUP", "DELETE", "RENUMBER", "KEY", "MONITOR", "USING", "UNTIL", "WHILE", "", "",
+};
+
+void cmdBasicList(void)
+{
+  char line[512] = { 0 };
+  char s[50];
+  mmem = NULL;
+
+  int ptr = 0x2001;
+  bool quote_flag = false;
+  
+  while (ptr != 0x0000)
+  {
+    int nextptr = get_mm_word(ptr);
+    if (nextptr == 0x0000)
+      break;
+
+    ptr += 2;
+    int linenum = get_mm_word(ptr);
+    ptr += 2;
+    sprintf(line, "%d ", linenum);
+
+    int token;
+    do
+    {
+      token = get_mm_byte(ptr);
+      ptr++;
+      if (token == 0xfe) // extended command?
+      {
+        token = get_mm_byte(ptr);
+        ptr++;
+        if (token >= 0x80)
+        {
+          sprintf(s, "{0x%02X}", token);
+          strcat(line, s);
+        }
+        else
+          strcat(line, mapCmds[token]);
+      }
+      else
+      { 
+        if (token == '"')
+          quote_flag = !quote_flag;
+
+        if ( (mapBasTok[token][0] == '\0' && token != 0)
+            || (quote_flag && (token < 0x20 || token >= 0x80) ) )
+        {
+          if (quote_flag)
+          {
+            strcat(line, mapPetscii[token]);
+          }
+          else
+          {
+            sprintf(s, "{0x%02X}", token);
+            strcat(line, s);
+          }
+        }
+        else
+          strcat(line, mapBasTok[token]);
+      }
+      // printf("ptr=%04X, token=%02X\n", ptr, token);
+      // if (ptr > 0x3140) return;
+    }
+    while (token != 0x00);
+
+    printf("%s\n", line);
+    ptr = nextptr;
   }
 }
 
