@@ -4630,7 +4630,7 @@ void search_range(int addr, int total, unsigned char *bytes, int length)
     // get memory at current pc
     mem_data *multimem = get_mem28array(addr + cnt);
 
-    for (int m = 0; m < 32; m++)
+    for (int m = 0; m < 16; m++)
     {
       mem_data mem = multimem[m];
 
