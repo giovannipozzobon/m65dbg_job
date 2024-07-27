@@ -162,6 +162,7 @@ type_command_details command_details[] =
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
   { "blist", cmdBasicList, "list the current basic program" },
+  { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index (based on currently selected vicii bank at $dd00)" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1864,6 +1865,58 @@ void cmdBasicList(void)
   }
 }
 
+
+void cmdSprite(void)
+{
+  char* strSprIdx = strtok(NULL, " ");
+
+  if (strSprIdx == NULL)
+  {
+    printf("Missing <spridx> parameter!\n");
+    return;
+  }
+
+  int spridx = get_sym_value(strSprIdx);
+
+  int vic_16kb_bank = peek(0xffd3d00) & 0x03;
+  int vic_addr = (3 - vic_16kb_bank) * 0x4000;
+  int spr_addr = vic_addr + spridx * 64;
+
+  // get memory at current pc
+  mem_data* multimem = get_mem28array(spr_addr);
+  int idx_cnt = 0;
+
+  printf("+------------------------+\n|");
+    for (int line = 0; line < 16; line++)
+    {
+      mem_data* mem = &multimem[line];
+
+      for (int k = 0; k < 16; k++)
+      {
+        int val = mem->b[k];
+
+        for (int bitfield = 128; bitfield >= 1; bitfield /= 2) {
+          if ( (val & bitfield) != 0) {
+            printf("*");
+          } else {
+            printf(" ");
+          }
+        }
+
+        idx_cnt++;
+        if ( (idx_cnt % 3) == 0) {
+          printf("|\n");
+          if (idx_cnt != 63) {
+            printf("|");
+          }
+        }
+        if (idx_cnt == 63) {
+          printf("+------------------------+\n");
+          return;
+        }
+      }
+    }
+}
 
 void cmd_poke(int size)
 {
