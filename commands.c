@@ -163,7 +163,7 @@ type_command_details command_details[] =
   { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
   { "blist", cmdBasicList, "list the current basic program" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index (based on currently selected vicii bank at $dd00)" },
-  { "char", cmdChar, "<charidx>", "print out the bits of the char at the given index (based on currently selected vicii bank at $dd00)" },
+  { "char", cmdChar, "<charidx> [<count>]", "print out the bits of the char at the given index (based on currently selected vicii bank at $dd00)" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1879,9 +1879,18 @@ void cmdSprite(void)
 
   int spridx = get_sym_value(strSprIdx);
 
+  // is it an absolute address?
+  if (strSprIdx[0] == '$') {
+    spridx = get_sym_value(strSprIdx+1);
+  }
+
   int vic_16kb_bank = peek(0xffd3d00) & 0x03;
   int vic_addr = (3 - vic_16kb_bank) * 0x4000;
   int spr_addr = vic_addr + spridx * 64;
+
+  if (strSprIdx[0] == '$') {
+    spr_addr = spridx;
+  }
 
   // get memory at current pc
   mem_data* multimem = get_mem28array(spr_addr);
@@ -1934,36 +1943,66 @@ void cmdChar(void)
 
   int chridx = get_sym_value(strCharIdx);
 
+  // is it an absolute address?
+  if (strCharIdx[0] == '$') {
+    chridx = get_sym_value(strCharIdx+1);
+  }
+
+  int cnt = 1;
+  char* strCount = strtok(NULL, " ");
+  if (strCount != NULL)
+  {
+    cnt = get_sym_value(strCount);
+  }
+
+
   int vic_16kb_bank = peek(0xffd3d00) & 0x03;
   int vic_addr = (3 - vic_16kb_bank) * 0x4000;
   int chr_data_base_addr_selector = (peek(0xffd3018) >> 1) & 0x07;
   int chr_data_base_addr = vic_addr + 0x800 * chr_data_base_addr_selector;
   int chr_addr = chr_data_base_addr + chridx * 8;
 
+  if (strCharIdx[0] == '$') {
+    chr_addr = chridx;
+  }
+
   int idx_cnt = 0;
 
   printf("vicii bank: $%04X - $%04X\n", vic_addr, vic_addr + 0x4000 - 1);
   printf("char idx $%02X address: $%04X\n", chridx, chr_addr);
 
-  printf("+--------+\n");
+  for (int k = 0 ; k < cnt; k++)
+    printf("+--------");
+  printf("+\n");
 
-  mem_data mem = get_mem(chr_addr, true);
+  mem_data mem[cnt];
+
+  for (int k = 0; k < cnt; k++)
+  {
+    mem[k] = get_mem(chr_addr + k * 8, true);
+  }
 
   for (int k = 0; k < 8; k++)
   {
-    int val = mem.b[k];
+    for (int ck = 0; ck < cnt; ck++)
+    {
+      int val = mem[ck].b[k];
 
-    printf("|");
-    for (int bitfield = 128; bitfield >= 1; bitfield /= 2) {
-      if ( (val & bitfield) != 0) {
-        printf("*");
-      } else {
-        printf(" ");
+      printf("|");
+      for (int bitfield = 128; bitfield >= 1; bitfield /= 2) {
+        if ( (val & bitfield) != 0) {
+          printf("*");
+        } else {
+          printf(" ");
+        }
       }
     }
     printf("|\n");
   }
-  printf("+--------+\n");
+
+  for (int k = 0 ; k < cnt; k++)
+    printf("+--------");
+  printf("+\n");
 }
 
 
