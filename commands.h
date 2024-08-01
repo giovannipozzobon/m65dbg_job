@@ -78,6 +78,7 @@ void cmdMapping(void);
 void cmdSeam(void);
 void cmdBasicList(void);
 void cmdSprite(void);
+void cmdChar(void);
 int doOneShotAssembly(char* strCommand);
 int  cmdGetCmdCount(void);
 char* cmdGetCmdName(int idx);

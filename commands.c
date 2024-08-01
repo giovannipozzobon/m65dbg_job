@@ -163,6 +163,7 @@ type_command_details command_details[] =
   { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
   { "blist", cmdBasicList, "list the current basic program" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index (based on currently selected vicii bank at $dd00)" },
+  { "char", cmdChar, "<charidx>", "print out the bits of the char at the given index (based on currently selected vicii bank at $dd00)" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1886,6 +1887,9 @@ void cmdSprite(void)
   mem_data* multimem = get_mem28array(spr_addr);
   int idx_cnt = 0;
 
+  printf("vicii bank: $%04X - $%04X\n", vic_addr, vic_addr + 0x4000 - 1);
+  printf("sprite idx $%02X address: $%04X\n", spridx, spr_addr);
+
   printf("+------------------------+\n|");
     for (int line = 0; line < 16; line++)
     {
@@ -1917,6 +1921,51 @@ void cmdSprite(void)
       }
     }
 }
+
+void cmdChar(void)
+{
+  char* strCharIdx = strtok(NULL, " ");
+
+  if (strCharIdx == NULL)
+  {
+    printf("Missing <charidx> parameter!\n");
+    return;
+  }
+
+  int chridx = get_sym_value(strCharIdx);
+
+  int vic_16kb_bank = peek(0xffd3d00) & 0x03;
+  int vic_addr = (3 - vic_16kb_bank) * 0x4000;
+  int chr_data_base_addr_selector = (peek(0xffd3018) >> 1) & 0x07;
+  int chr_data_base_addr = vic_addr + 0x800 * chr_data_base_addr_selector;
+  int chr_addr = chr_data_base_addr + chridx * 8;
+
+  int idx_cnt = 0;
+
+  printf("vicii bank: $%04X - $%04X\n", vic_addr, vic_addr + 0x4000 - 1);
+  printf("char idx $%02X address: $%04X\n", chridx, chr_addr);
+
+  printf("+--------+\n");
+
+  mem_data mem = get_mem(chr_addr, true);
+
+  for (int k = 0; k < 8; k++)
+  {
+    int val = mem.b[k];
+
+    printf("|");
+    for (int bitfield = 128; bitfield >= 1; bitfield /= 2) {
+      if ( (val & bitfield) != 0) {
+        printf("*");
+      } else {
+        printf(" ");
+      }
+    }
+    printf("|\n");
+  }
+  printf("+--------+\n");
+}
+
 
 void cmd_poke(int size)
 {
