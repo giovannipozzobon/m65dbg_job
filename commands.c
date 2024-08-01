@@ -161,9 +161,13 @@ type_command_details command_details[] =
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
-  { "blist", cmdBasicList, "list the current basic program" },
-  { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index (based on currently selected vicii bank at $dd00)" },
-  { "char", cmdChar, "<charidx> [<count>]", "print out the bits of the char at the given index (based on currently selected vicii bank at $dd00)" },
+  { "blist", cmdBasicList, NULL, "list the current basic program" },
+  { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index\n"
+"                 (based on currently selected vicii bank at $dd00)\n"
+"                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
+  { "char", cmdChar, "<charidx> [<count>]", "print out the bits of the char at the given index\n"
+"                 (based on currently selected vicii bank at $dd00)\n"
+"                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -4784,6 +4788,13 @@ void search_range(int addr, int total, unsigned char *bytes, int length)
             found_start = true;
             start_loc = mem.addr + k;
             found_count++;
+            if (length == 1) {
+              printf("%07X\n", start_loc);
+              found_start = false;
+              found_count = 0;
+              start_loc = 0;
+              results_cnt++;
+            }
           }
         }
         else // matched till the end?
