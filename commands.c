@@ -1959,6 +1959,16 @@ void cmdChar(void)
     cnt = get_sym_value(strCount);
   }
 
+  int inc = 1;
+  char* strIncrement = strtok(NULL, " ");
+  if (strIncrement != NULL)
+  {
+    inc = get_sym_value(strIncrement);
+    if (inc == 0) {
+      printf("increment value cannot be zero!\n");
+      return;
+    }
+  }
 
   int vic_16kb_bank = peek(0xffd3d00) & 0x03;
   int vic_addr = (3 - vic_16kb_bank) * 0x4000;
@@ -1983,7 +1993,7 @@ void cmdChar(void)
 
   for (int k = 0; k < cnt; k++)
   {
-    mem[k] = get_mem(chr_addr + k * 8, true);
+    mem[k] = get_mem(chr_addr + (k*inc) * 8, true);
   }
 
   for (int k = 0; k < 8; k++)
@@ -2004,7 +2014,7 @@ void cmdChar(void)
     printf("|\n");
   }
 
-  for (int k = 0 ; k < cnt; k++)
+  for (int k = 0; k < cnt; k++)
     printf("+--------");
   printf("+\n");
 }
@@ -2142,8 +2152,12 @@ void print_char(int c)
   }
   else
   {
-    if (isprint(c) && c > 31)
+    if (isprint(c) && c > 31) {
+      if (c >= 192 && c <= 223)   // codes from 192-223 are equal to 96-127
+        c -= 96;
+
       printf("%c", c);
+    }
     else
       printf(".");
   }
