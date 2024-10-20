@@ -3696,6 +3696,9 @@ void print_str_maxlen(char* token, int maxlen, bool useAddr28)
 
       string[cnt] = mem.b[k];
 
+      if (string[cnt] >= '\xC0' && string[cnt] <= '\xDF')
+        string[cnt] -= 96;
+
       if (mem.b[k] == 0)
       {
         printf(" %s: %s\n", token, string);
