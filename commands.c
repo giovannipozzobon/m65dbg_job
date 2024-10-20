@@ -2152,9 +2152,10 @@ void print_char(int c)
   }
   else
   {
+    if (c >= 192 && c <= 223)   // codes from 192-223 are equal to 96-127
+      c -= 96;
+
     if (isprint(c) && c > 31) {
-      if (c >= 192 && c <= 223)   // codes from 192-223 are equal to 96-127
-        c -= 96;
 
       printf("%c", c);
     }
