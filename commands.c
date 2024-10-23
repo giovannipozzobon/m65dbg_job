@@ -3401,7 +3401,15 @@ void cmdFinish(void)
 // the hex-value of the string
 int get_sym_value(char* token)
 {
+  bool deref_flag = false;
   int addr = 0;
+
+  // check if we're de-referencing a 16-bit pointer
+  if (token[0] == '*')
+  {
+    deref_flag = true;
+    token++;
+  }
 
   // if token starts with ":", then let's assume it is
   // for a line number of the current file
@@ -3428,13 +3436,20 @@ int get_sym_value(char* token)
   type_symmap_entry* sme = find_in_symmap(token);
   if (sme != NULL)
   {
-    return sme->addr;
+    addr = sme->addr;
   }
   else
   {
     sscanf(token, "%X", &addr);
-    return addr;
   }
+
+  if (deref_flag)
+  {
+    mem_data mem = get_mem(addr, false);
+    return mem.b[0] + (mem.b[1] << 8);
+  }
+
+  return addr;
 }
 
 void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal)
