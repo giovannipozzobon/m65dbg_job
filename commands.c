@@ -1299,6 +1299,7 @@ void load_acme_list(char* fname)
   int lineno, memaddr;
   char val1[256];
   char val2[256];
+  char val3[256];
 
   bool priorWasByteArray = false;
   type_fileloc *prior_fl = NULL;
@@ -1316,7 +1317,7 @@ void load_acme_list(char* fname)
     }
     else
     {
-      if (sscanf(line, "%d %s %s", &lineno, val1, val2) == 3)
+      if (sscanf(line, "%d %s %s %s", &lineno, val1, val2, val3) == 4)
       {
         if (is_hex(val1) && (is_hex(val2) || is_hexarray(val2)))
         {
@@ -1334,7 +1335,7 @@ void load_acme_list(char* fname)
           fl.lineno = lineno;
           prior_fl = add_to_list(fl);
 
-          if (is_hexarray(val2))
+          if (is_hexarray(val2) || val3[0] == '+') // assess acme macros too
             priorWasByteArray = true;
         }
       }
