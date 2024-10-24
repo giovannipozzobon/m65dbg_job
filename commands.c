@@ -3313,9 +3313,26 @@ void cmdHardNext(void)
     sscanf(token, "%d", &count);
   }
 
+  // get current register values
+  reg_data reg = get_regs();
+
   for (int k = 0; k < count; k++)
   {
-    hard_next();
+    type_fileloc *found = find_in_list(reg.pc);
+    cur_file_loc = found;
+
+    if (found->lastaddr != 0 && (found->addr <= reg.pc && reg.pc <= found->lastaddr))
+    {
+      do
+      {
+        hard_next();
+        reg = get_regs();
+      } while(reg.pc <= found->lastaddr);
+    }
+    else
+    {
+      hard_next();
+    }
   }
 
   if (outputFlag)
