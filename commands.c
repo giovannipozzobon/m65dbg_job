@@ -168,6 +168,7 @@ type_command_details command_details[] =
   { "char", cmdChar, "<charidx> [<count>]", "print out the bits of the char at the given index\n"
 "                 (based on currently selected vicii bank at $dd00)\n"
 "                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
+  { "set", cmdSet, "<addr> <string|bytes>", "set bytes at the given address to the desired string or bytes" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1729,7 +1730,7 @@ char mapCmds[128][12] =
   "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
 };
 
-char mapPetscii[256][12] =
+char mapPetscii[256][20] =
 {
   // 0x00 - 0x0f
   "{0x00}", "{alt-palette}", "{underline-on}", "{0x03}", "{default-palette}", "{white}", "{0x06}", "{bell}", "{0x08}", "{tab}", "{linefeed}", "{disable-shift-mega}", "{enable-shift-mega}", "{return}", "{lower-case}", "{flash-on}",
@@ -1935,6 +1936,57 @@ void cmdSprite(void)
     }
 }
 
+void cmdSet(void)
+{
+  int addr;
+  char command_str[1024] = { 0 };
+  char byte_str[8] = { 0 };
+
+  char* strAddr = strtok(NULL, " ");
+  if (strAddr == NULL) {
+    printf("Missing <addr> parameter!\n");
+  }
+
+  addr = get_sym_value(strAddr);
+
+  sprintf(command_str, "s %04X ", addr);
+
+  char* strValues = strtok(NULL, "\0");
+  char* strVend = strValues + strlen(strValues);
+
+  while (strValues[0] != '\0')
+  {
+    // provided a string
+    if (strValues[0] == '\"')
+    {
+      strValues++; // skip the starting dbl quote
+      while (strValues[0] != '\"') {
+        sprintf(byte_str, "%02X ", strValues[0]);
+        strcat(command_str, byte_str);
+        strValues++;
+      }
+      strValues++; // skip the ending dbl quote
+    }
+    else if (strValues[0] == ' '
+        || strValues[0] ==',') { // skip spaces or commas
+      strValues++;
+    }
+    else { // assume it is a hex byte
+      char *sval = strtok(strValues, " ");
+      strcat(command_str, sval);
+      strcat(command_str, " ");
+      strValues += strlen(sval);
+      if (strValues != strVend && strValues[0] == '\0') // skip any \0 from strtok
+        strValues++;
+    }
+  }
+  strcat(command_str, "\n");
+  printf("RAW: %s", command_str);
+
+  serialWrite(command_str);
+  serialRead(inbuf, BUFSIZE);
+}
+
 void cmdChar(void)
 {
   char* strCharIdx = strtok(NULL, " ");
@@ -1979,8 +2031,6 @@ void cmdChar(void)
   if (strCharIdx[0] == '$') {
     chr_addr = chridx;
   }
-
-  int idx_cnt = 0;
 
   printf("vicii bank: $%04X - $%04X\n", vic_addr, vic_addr + 0x4000 - 1);
   printf("char idx $%02X address: $%04X\n", chridx, chr_addr);
@@ -2826,12 +2876,12 @@ int modematcher(char* curmode, char* modeform, int* var1, int* var2)
     {
       k++; // skip over the '%x' token
 
-      if (!isxdigit(*p))  // if no hexadecimal value here, then we've failed to match
+      if (!isxdigit((int)*p))  // if no hexadecimal value here, then we've failed to match
         return 0;
 
       str[0] = '\0';
       int i = 0;
-      while(isxdigit(*p)) // skip over the hexadecimal value
+      while(isxdigit((int)*p)) // skip over the hexadecimal value
       {
         str[i] = *p;
         i++;
@@ -4496,7 +4546,7 @@ void cmdPrintValue(void)
     val = get_sym_value(strVal+1);
   else if (strVal[0] == '%')
     val = parseBinaryString(strVal+1);
-  else if (isdigit(strVal[0]))
+  else if (isdigit((int)strVal[0]))
     sscanf(strVal, "%d", &val);
   else
     val = get_sym_value(strVal);
