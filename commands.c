@@ -170,6 +170,7 @@ type_command_details command_details[] =
 "                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
   { "set", cmdSet, "<addr> <string|bytes>", "set bytes at the given address to the desired string or bytes" },
   { "reload", cmdReload, NULL, "reloads any list and map files (in-case you've rebuilt them recently)" },
+  { "go", cmdGo, "<addr>", "sets the PC to the desired address." },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1984,6 +1985,28 @@ void cmdSet(void)
     }
   }
   strcat(command_str, "\n");
+  printf("RAW: %s", command_str);
+
+  serialWrite(command_str);
+  serialRead(inbuf, BUFSIZE);
+}
+
+
+void cmdGo(void)
+{
+  int addr;
+  char command_str[1024] = { 0 };
+  char byte_str[8] = { 0 };
+
+  char* strAddr = strtok(NULL, " ");
+  if (strAddr == NULL) {
+    printf("Missing <addr> parameter!\n");
+  }
+
+  addr = get_sym_value(strAddr);
+
+  sprintf(command_str, "g %04X\n", addr);
+
   printf("RAW: %s", command_str);
 
   serialWrite(command_str);
