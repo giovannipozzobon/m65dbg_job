@@ -169,6 +169,7 @@ type_command_details command_details[] =
 "                 (based on currently selected vicii bank at $dd00)\n"
 "                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
   { "set", cmdSet, "<addr> <string|bytes>", "set bytes at the given address to the desired string or bytes" },
+  { "reload", cmdReload, NULL, "reloads any list and map files (in-case you've rebuilt them recently)" },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1988,6 +1989,47 @@ void cmdSet(void)
   serialWrite(command_str);
   serialRead(inbuf, BUFSIZE);
 }
+
+
+void clearListsAndMaps(void)
+{
+  // clear list data
+  type_fileloc* iterF = lstFileLoc;
+  type_fileloc* curFileLoc;
+
+  while (iterF != NULL) {
+    curFileLoc = iterF;
+    iterF = iterF->next;
+
+    free(curFileLoc->file);
+    free(curFileLoc);
+  }
+
+  lstFileLoc = NULL;
+
+  // clear map data
+  type_symmap_entry* iterS = lstSymMap;
+  type_symmap_entry* curSym = NULL;
+
+  while (iterS != NULL) {
+    curSym = iterS;
+    iterS = iterS->next;
+
+    free(curSym->sval);
+    free(curSym->symbol);
+    free(curSym);
+  }
+
+  lstSymMap = NULL;
+}
+
+
+void cmdReload(void)
+{
+  clearListsAndMaps();
+  listSearch();
+}
+
 
 void cmdChar(void)
 {

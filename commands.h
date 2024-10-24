@@ -80,6 +80,7 @@ void cmdBasicList(void);
 void cmdSprite(void);
 void cmdChar(void);
 void cmdSet(void);
+void cmdReload(void);
 int doOneShotAssembly(char* strCommand);
 int  cmdGetCmdCount(void);
 char* cmdGetCmdName(int idx);
