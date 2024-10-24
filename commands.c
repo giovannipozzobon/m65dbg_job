@@ -1960,10 +1960,11 @@ void cmdSet(void)
     if (strValues[0] == '\"')
     {
       strValues++; // skip the starting dbl quote
-      while (strValues[0] != '\"') {
+      while (strValues[0] != '\"' && strValues[0] != '\0') {
         sprintf(byte_str, "%02X ", strValues[0]);
         strcat(command_str, byte_str);
-        strValues++;
+        if (strValues[0] != '\0')
+          strValues++;
       }
       strValues++; // skip the ending dbl quote
     }
