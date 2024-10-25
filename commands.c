@@ -1996,7 +1996,6 @@ void cmdGo(void)
 {
   int addr;
   char command_str[1024] = { 0 };
-  char byte_str[8] = { 0 };
 
   char* strAddr = strtok(NULL, " ");
   if (strAddr == NULL) {
@@ -3850,7 +3849,7 @@ void print_str_maxlen(char* token, int maxlen, bool useAddr28)
 
       if (mem.b[k] == 0)
       {
-        printf(" %s: %s\n", token, string);
+        printf(" %s: \"%s\"\n", token, string);
         return;
       }
       cnt++;
