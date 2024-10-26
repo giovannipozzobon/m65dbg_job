@@ -132,6 +132,7 @@ typedef struct we
 {
   type_watch type;
   bool show_decimal;
+  bool show_char;
   char* name;
   char* param1;
   struct we* next;

@@ -17,6 +17,7 @@
 #include "m65.h"
 
 int get_sym_value(char* token);
+void print_char(int c);
 
 typedef struct
 {
@@ -176,7 +177,7 @@ type_command_details command_details[] =
 
 // a few function prototypes
 mem_data get_mem(int addr, bool useAddr28);
-void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal);
+void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal, bool show_char);
 void print_word_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_dword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_qword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
@@ -461,6 +462,7 @@ void copy_watch(type_watch_entry* dest, type_watch_entry* src)
 {
   dest->type = src->type;
   dest->show_decimal = src->show_decimal;
+  dest->show_char = src->show_char;
   dest->name = strdup(src->name);
   dest->param1 = src->param1 ? strdup(src->param1) : NULL;
   dest->next = NULL;
@@ -2851,7 +2853,7 @@ void cmdLocals(void)
     int addr = sptop + iter->offset;
     printf("@ $%04X :", addr);
     if (iter->size == 1)
-      print_byte_at_addr(iter->name, addr, false, false);
+      print_byte_at_addr(iter->name, addr, false, false, false);
     else if (iter->size == 2)
       print_word_at_address(iter->name, addr, false, false);
     else if (iter->size == 4)
@@ -3594,26 +3596,32 @@ int get_sym_value(char* token)
   return addr;
 }
 
-void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal)
+void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal, bool show_char)
 {
   mem_data mem = get_mem(addr, useAddr28);
 
   if (show_decimal)
     printf(" %s: /d %d\n", token, mem.b[0]);
+  else if (show_char) {
+    printf(" %s: /c '", token);
+    print_char(mem.b[0]);
+    printf("'\n");
+  }
   else
     printf(" %s: %02X\n", token, mem.b[0]);
 }
 
-void print_byte(char *token, bool useAddr28, bool show_decimal)
+void print_byte(char *token, bool useAddr28, bool show_decimal, bool show_char)
 {
   int addr = get_sym_value(token);
 
-  print_byte_at_addr(token, addr, useAddr28, show_decimal);
+  print_byte_at_addr(token, addr, useAddr28, show_decimal, show_char);
 }
 
 void cmdPrintByte(void)
 {
   bool show_decimal = false;
+  bool show_char = false;
   char* token = strtok(NULL, " ");
 
   if (token != NULL)
@@ -3622,14 +3630,19 @@ void cmdPrintByte(void)
       show_decimal = true;
       token = strtok(NULL, " ");
     }
+    else if (strcmp(token, "/c") == 0) {
+      show_char = true;
+      token = strtok(NULL, " ");
+    }
     if (token != NULL)
-      print_byte(token, false, show_decimal);
+      print_byte(token, false, show_decimal, show_char);
   }
 }
 
 void cmdPrintMByte(void)
 {
   bool show_decimal = false;
+  bool show_char = false;
   char* token = strtok(NULL, " ");
 
   if (token != NULL)
@@ -3638,8 +3651,12 @@ void cmdPrintMByte(void)
       show_decimal = true;
       token = strtok(NULL, " ");
     }
+    else if (strcmp(token, "/c") == 0) {
+      show_char = true;
+      token = strtok(NULL, " ");
+    }
     if (token != NULL)
-      print_byte(token, true, show_decimal);
+      print_byte(token, true, show_decimal, show_char);
   }
 }
 
@@ -4224,12 +4241,18 @@ void cmdSetSoftwareBreakpoint(void)
 void cmd_watch(type_watch type)
 {
   bool show_decimal = false;
+  bool show_char = false;
+
   char* token = strtok(NULL, " ");
 
   if (token != NULL)
   {
     if (strcmp(token, "/d") == 0) {
       show_decimal = true;
+      token = strtok(NULL, " ");
+    }
+    if (strcmp(token, "/c") == 0) {
+      show_char = true;
       token = strtok(NULL, " ");
     }
 
@@ -4242,6 +4265,7 @@ void cmd_watch(type_watch type)
     type_watch_entry we;
     we.type = type;
     we.show_decimal = show_decimal;
+    we.show_char = show_char;
     we.name = token;
     we.param1 = NULL;
 
@@ -4358,14 +4382,14 @@ void cmdWatches(void)
 
     switch (iter->type)
     {
-      case TYPE_BYTE:   print_byte(iter->name, false, iter->show_decimal);   break;
+      case TYPE_BYTE:   print_byte(iter->name, false, iter->show_decimal, iter->show_char);   break;
       case TYPE_WORD:   print_word(iter->name, false, iter->show_decimal);   break;
       case TYPE_DWORD:  print_dword(iter->name, false, iter->show_decimal);  break;
       case TYPE_QWORD:  print_qword(iter->name, false, iter->show_decimal);  break;
       case TYPE_STRING: print_string(iter->name, false); break;
       case TYPE_DUMP:   print_dump(iter);         break;
 
-      case TYPE_MBYTE:   print_byte(iter->name, true, iter->show_decimal);   break;
+      case TYPE_MBYTE:   print_byte(iter->name, true, iter->show_decimal, iter->show_char);   break;
       case TYPE_MWORD:   print_word(iter->name, true, iter->show_decimal);   break;
       case TYPE_MDWORD:  print_dword(iter->name, true, iter->show_decimal);  break;
       case TYPE_MQWORD:  print_qword(iter->name, true, iter->show_decimal);  break;
