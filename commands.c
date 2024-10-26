@@ -1455,6 +1455,15 @@ void show_regs(reg_data* reg)
 {
   printf("PC   A  X  Y  Z  B  SP   MAPH MAPL LAST-OP     P  P-FLAGS   RGP uS IO\n");
   printf("%04X %02X %02X %02X %02X %02X %04X %04X %04X %02X       %02X %02X %s\n", reg->pc, reg->a, reg->x, reg->y, reg->z, reg->b, reg->sp, reg->maph, reg->mapl, reg->lastop, reg->odd1, reg->odd2, reg->flags);
+  printf("     ");
+  print_char(reg->a);
+  printf("  ");
+  print_char(reg->x);
+  printf("  ");
+  print_char(reg->y);
+  printf("  ");
+  print_char(reg->z);
+  printf("\n");
 }
 
 mem_data get_mem(int addr, bool useAddr28)
