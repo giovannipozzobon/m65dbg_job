@@ -1,0 +1,2151 @@
+******************************* Segment: Default *******************************
+[BASIC Upstart]
+2001: 10 20 0a 00                                      -         .word !nextline+, 10    // line 10
+2005: fe 02     -         .byte $fe, $02          // BANK0
+2007: 30 3a     -         .text "0:"
+2009: 9e        -         .byte $9e               // SYS$addr
+200a: 24        -         .text "$"
+200b: 32        -         .byte floor(((!main+>>12) & $f)/10)*7 + $30 + ((!main+>>12) & $f)
+200c: 30        -         .byte floor(((!main+>>8) & $f)/10)*7 + $30 + ((!main+>>8) & $f)
+200d: 31        -         .byte floor(((!main+>>4) & $f)/10)*7 + $30 + ((!main+>>4) & $f)
+200e: 32        -         .byte floor((!main+ & $f)/10)*7 + $30 + (!main+ & $f)
+200f: 00        -         .byte 0                 // eol
+2010: 00 00     -         .word 0                 // eop
+
+[Main]
+2012: a9 41     - setup:  lda #65
+2014: 85 00     -         sta $00                 // switch to 40.5 MHz
+2016: a9 00     -         lda #0
+2018: aa        -         tax
+2019: a8        -         tay
+201a: 4b        -         taz
+201b: 5c        -         map
+201c: ea        -         eom                     // zero out memory mapping
+201d: a9 47     -         lda #$47                // do the magic knock
+201f: 8d 2f d0  -         sta $d02f
+2022: a9 53     -         lda #$53
+2024: 8d 2f d0  -         sta $d02f
+2027: 78        -         sei                     // disable interupts
+2028: d8        -         cld                     // no binary decimals
+2029: a9 8a     -         lda #basepage
+202b: 5b        -         tab                     // move base-page so we can use base page addresses for everything
+202c: ad 10 d6  -         lda UART_ASCIIKEY
+202f: f0 05     -         beq !enduart+
+2031: 8d 10 d6  -         sta UART_ASCIIKEY
+2034: 80 f6     -         bra !loop-
+2036: ad 31 d0  - start:  lda VICIII_SCRNMODE
+2039: 85 f0     -         sta vicstate
+203b: ad 54 d0  -         lda VICIV_SCRNMODE
+203e: 85 f1     -         sta vicstate+1
+2040: ad 60 d0  -         lda VICIV_SCRNPTR1
+2043: 85 f2     -         sta vicstate+2
+2045: ad 61 d0  -         lda VICIV_SCRNPTR2
+2048: 85 f3     -         sta vicstate+3
+204a: ad 62 d0  -         lda VICIV_SCRNPTR3
+204d: 85 f4     -         sta vicstate+4
+204f: ad 63 d0  -         lda VICIV_SCRNPTR4
+2052: 85 f5     -         sta vicstate+5
+2054: ad 58 d0  -         lda VICIV_LINESTEPLO
+2057: 85 f6     -         sta vicstate+6
+2059: ad 59 d0  -         lda VICIV_LINESTEPHI
+205c: 85 f7     -         sta vicstate+7
+205e: ad 70 d0  -         lda VICIV_PALETTE
+2061: 85 f8     -         sta vicstate+8
+2063: ad 5e d0  -         lda VICIV_CHRCOUNT
+2066: 85 f9     -         sta vicstate+9
+2068: ad 64 d0  -         lda VICIV_COLPTRLO
+206b: 85 fa     -         sta vicstate+10
+206d: ad 65 d0  -         lda VICIV_COLPTRHI
+2070: 85 fb     -         sta vicstate+11
+2072: ad 21 d0  -         lda VICIV_SCREENCOL
+2075: 85 fc     -         sta vicstate+12
+2077: ad 20 d0  -         lda VICIV_BORDERCOL
+207a: 85 fd     -         sta vicstate+13
+207c: a9 00     -         lda #0
+207e: 8d 20 d0  -         sta VICIV_BORDERCOL
+2081: 8d 21 d0  -         sta VICIV_SCREENCOL             // black background and border
+2084: a9 00     -         lda #<[gfxram>>6]       // fill screen with pointers to gfxram by dividing by 64 i primi 256 caratteri sono quelli standard
+2086: 85 00     -         sta scrn_ptr
+2088: a9 10     -         lda #>[gfxram>>6]
+208a: 85 01     -         sta scrn_ptr+1          // set scrn_ptr to current charcode gfxram/64
+208c: a3 00     -         ldz #0                  // z loop index (x coord)
+208e: a9 00     -         lda #<scrram            // set addr ptr to scrmem:
+2090: 85 02     -         sta scrn_row            // each y column starts with the same
+2092: a9 00     -         lda #>scrram            // addr, as we use z to index into the
+2094: 85 03     -         sta scrn_row+1          // row
+2096: a0 19     -         ldy #25                 // y loop counter (y coord)
+2098: a5 00     -         lda scrn_ptr
+209a: 92 02     -         sta (scrn_row),z        // put low byte of char on screen
+209c: 1b        -         inz                     // next index
+209d: a5 01     -         lda scrn_ptr+1
+209f: 92 02     -         sta (scrn_row),z        // put high byte of char on screen
+20a1: 3b        -         dez                     // prev index
+20a2: e6 00     -         inc scrn_ptr
+20a4: d0 02     -         bne !ov+
+20a6: e6 01     -         inc scrn_ptr+1          // increment scr_row value by one
+20a8: a9 50     -         lda #80
+20aa: 18        -         clc
+20ab: 65 02     -         adc scrn_row
+20ad: 85 02     -         sta scrn_row
+20af: 90 02     -         bcc !ov+
+20b1: e6 03     -         inc scrn_row+1          // add 80 to scrn_row
+20b3: 88        -         dey
+20b4: d0 e2     -         bne !loopy-             // next y
+20b6: 1b        -         inz
+20b7: 1b        -         inz                     // inc x coord by 2 (16bit characters!)
+20b8: c2 50     -         cpz #80                 // cmp x coord to 80 (end of line)
+20ba: d0 d2     -         bne !loopx-             // next x
+20bc: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+20be: 8d 02 d7  -         sta DMA_ADDRBANK
+20c1: a9 20     -         lda #>!fcm_dma+
+20c3: 8d 01 d7  -         sta DMA_ADDRMSB
+20c6: a9 cd     -         lda #<!fcm_dma+
+20c8: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+20cb: 80 2f     -         bra !fcm_dma_end+       // branch over DMA job data
+20cd: 0a 00     -         .byte $0a, $00                  // 11 byte mode
+20cf: 07        -         .byte DMA_FILL|DMA_CHAIN        // fill, chain next job
+20d0: 00 fa     -         .word 64*40*25
+20d2: 00 00     -         .word [gfxcol & $ff]            // colour code to fill with, one byte
+20d4: 00        -         .byte $00                       // src bank (ignored)
+20d5: 00 00     -         .word [gfxram & $ffff]          // dest
+20d7: 04        -         .byte [(gfxram>>16) & $f]       // destbnk(0-3) + flags
+20d8: 00 00     -         .word $0000                     // modulo (ignored)
+20da: 0a        -         .byte $0a                       // 11 byte mode
+20db: 81 ff     -         .byte $81, $ff                  // dest bank $ff
+20dd: 85 02     -         .byte $85, $02                  // increment by 2
+20df: 00        -         .byte $00                       // eol
+20e0: 07        -         .byte DMA_FILL|DMA_CHAIN        // fill, chain next job
+20e1: e8 03     -         .word 1000                      // 40*25 (chr16 lowres)
+20e3: 00 00     -         .word 0                         // clear
+20e5: 00        -         .byte $00                       // src bank (ignored)
+20e6: 00 10     -         .word [colram & $ffff]          // dest
+20e8: 08        -         .byte [(colram>>16) & $f]       // destbnk -> FF 8 0000
+20e9: 00 00     -         .word $0000                     // modulo (ignored)
+20eb: 0a        -         .byte $0a                       // 11 byte mode
+20ec: 81 ff     -         .byte $81, $ff                  // dest bank $ff
+20ee: 85 02     -         .byte $85, $02                  // increment by 2
+20f0: 00        -         .byte $00                       // eol
+20f1: 03        -         .byte DMA_FILL                  // fill, last job
+20f2: e8 03     -         .word 1000                      // 40*25
+20f4: 0b 00     -         .word [colour & $f]             // colour (high byte)
+20f6: 00        -         .byte $00                       // src bank (ignored)
+20f7: 01 10     -         .word [(colram+1) & $ffff]      // dest
+20f9: 08        -         .byte [((colram+1)>>16) & $f]   // destbnk -> FF 8 0000
+20fa: 00 00     -         .word $0000                     // modulo (ignored)
+20fc: a9 88     -         lda #(VICIII_SM_H640|VICIII_SM_V400)
+20fe: 1c 31 d0  -         trb VICIII_SCRNMODE                   // clear H640 and V400 for 320x200
+2101: ad 54 d0  -         lda VICIV_SCRNMODE
+2104: 09 05     -         ora #(VICIV_SM_FCLRHI|VICIV_SM_CHR16) // set FCLRHI + CHR16 
+2106: 29 fd     -         and #(~VIVIV_SM_FCLRLO)               // clear FCLRLO for super extended attr mode
+2108: 8d 54 d0  -         sta VICIV_SCRNMODE
+210b: a9 50     -         lda #80
+210d: 8d 58 d0  -         sta VICIV_LINESTEPLO
+2110: a9 00     -         lda #0
+2112: 8d 59 d0  -         sta VICIV_LINESTEPHI    // one line of 40 chars is 80 byte
+2115: a9 28     -         lda #40
+2117: 8d 5e d0  -         sta VICIV_CHRCOUNT      // we are drawing only 40 chars, high bits are in VICIV_SCRNPTR4
+211a: a9 00     -         lda #<scrmem            // set screen start address (28bit)
+211c: 8d 60 d0  -         sta VICIV_SCRNPTR1
+211f: a9 00     -         lda #>scrmem
+2121: 8d 61 d0  -         sta VICIV_SCRNPTR2
+2124: a9 05     -         lda #<[scrmem >> 16]
+2126: 8d 62 d0  -         sta VICIV_SCRNPTR3
+2129: a9 00     -         lda #>[scrmem >> 16]
+212b: 8d 63 d0  -         sta VICIV_SCRNPTR4      // also clears EXGLYPH and CHRCOUNT in high nibble
+212e: a9 00     -         lda #<colmem
+2130: 8d 64 d0  -         sta VICIV_COLPTRLO
+2133: a9 10     -         lda #>colmem
+2135: 8d 65 d0  -         sta VICIV_COLPTRHI      // set colorram start address
+2138: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+213a: 8d 02 d7  -         sta DMA_ADDRBANK
+213d: a9 21     -         lda #>!fcm_dma+
+213f: 8d 01 d7  -         sta DMA_ADDRMSB
+2142: a9 49     -         lda #<!fcm_dma+
+2144: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+2147: 80 0d     -         bra !fcm_dma_end+       // branch over DMA job data
+2149: 0b 00     -         .byte $0b, $00   // 11 mode and copy                 
+214b: 00        -         .byte $00  // copy
+214c: 00 40     -         .word len //len
+214e: 40 2e     -         .word [source & $ffff]
+2150: 00        -         .byte [(source>>16) & $f]
+2151: 00 00     -         .word [dest & $ffff]          // dest
+2153: 04        -         .byte [(dest>>16) & $f]       // destbnk(0-3) + flags
+2154: 00 00     -         .word $0000                     // modulo (ignored)
+2156: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+2158: 8d 02 d7  -         sta DMA_ADDRBANK
+215b: a9 21     -         lda #>!fcm_dma+
+215d: 8d 01 d7  -         sta DMA_ADDRMSB
+2160: a9 67     -         lda #<!fcm_dma+
+2162: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+2165: 80 0d     -         bra !fcm_dma_end+       // branch over DMA job data
+2167: 0b 00     -         .byte $0b, $00   // 11 mode and copy                 
+2169: 00        -         .byte $00  // copy
+216a: d0 07     -         .word len //len
+216c: 40 26     -         .word [source & $ffff]
+216e: 00        -         .byte [(source>>16) & $f]
+216f: 00 00     -         .word [dest & $ffff]          // dest
+2171: 05        -         .byte [(dest>>16) & $f]       // destbnk(0-3) + flags
+2172: 00 00     -         .word $0000                     // modulo (ignored)
+2174: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+2176: 8d 02 d7  -         sta DMA_ADDRBANK
+2179: a9 21     -         lda #>!fcm_dma+
+217b: 8d 01 d7  -         sta DMA_ADDRMSB
+217e: a9 85     -         lda #<!fcm_dma+
+2180: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+2183: 80 0d     -         bra !fcm_dma_end+       // branch over DMA job data
+2185: 0b 00     -         .byte $0b, $00   // 11 mode and copy                 
+2187: 00        -         .byte $00  // copy
+2188: d0 07     -         .word len //len
+218a: 40 26     -         .word [source & $ffff]
+218c: 00        -         .byte [(source>>16) & $f]
+218d: d0 07     -         .word [dest & $ffff]          // dest
+218f: 05        -         .byte [(dest>>16) & $f]       // destbnk(0-3) + flags
+2190: 00 00     -         .word $0000                     // modulo (ignored)
+2192: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+2194: 8d 02 d7  -         sta DMA_ADDRBANK
+2197: a9 21     -         lda #>!fcm_dma+
+2199: 8d 01 d7  -         sta DMA_ADDRMSB
+219c: a9 a3     -         lda #<!fcm_dma+
+219e: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+21a1: 80 0f     -         bra !fcm_dma_end+       // branch over DMA job data
+21a3: 0a        -         .byte $0a                       // 11 byte mode
+21a4: 85 02     -         .byte $85, $02                  // increment by 2
+21a6: 00        -         .byte $00                       // eol
+21a7: 03        -         .byte DMA_FILL                  // fill, chain next job
+21a8: d0 07     -         .word len
+21aa: 10 00     -         .word value                     // colour code to fill with, one byte
+21ac: 00        -         .byte $00                       // src bank (ignored)
+21ad: 01 00     -         .word [dest & $ffff]            // dest
+21af: 05        -         .byte [(dest>>16) & $f]         // destbnk(0-3) + flags
+21b0: 00 00     -         .word $0000                     // modulo (ignored)
+21b2: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+21b4: 8d 02 d7  -         sta DMA_ADDRBANK
+21b7: a9 21     -         lda #>!fcm_dma+
+21b9: 8d 01 d7  -         sta DMA_ADDRMSB
+21bc: a9 c3     -         lda #<!fcm_dma+
+21be: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+21c1: 80 0f     -         bra !fcm_dma_end+       // branch over DMA job data
+21c3: 0a        -         .byte $0a                       // 11 byte mode
+21c4: 85 02     -         .byte $85, $02                  // increment by 2
+21c6: 00        -         .byte $00                       // eol
+21c7: 03        -         .byte DMA_FILL                  // fill, chain next job
+21c8: d0 07     -         .word len
+21ca: 10 00     -         .word value                     // colour code to fill with, one byte
+21cc: 00        -         .byte $00                       // src bank (ignored)
+21cd: d1 07     -         .word [dest & $ffff]            // dest
+21cf: 05        -         .byte [(dest>>16) & $f]         // destbnk(0-3) + flags
+21d0: 00 00     -         .word $0000                     // modulo (ignored)
+21d2: a9 00     -         lda #0                  // call DMA controller to fill screen & charram
+21d4: 8d 02 d7  -         sta DMA_ADDRBANK
+21d7: a9 21     -         lda #>!fcm_dma+
+21d9: 8d 01 d7  -         sta DMA_ADDRMSB
+21dc: a9 e3     -         lda #<!fcm_dma+
+21de: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // trigger extended DMA job
+21e1: 80 0d     -         bra !fcm_dma_end+       // branch over DMA job data
+21e3: 0b 00     -         .byte $0b, $00   // 11 mode and copy                 
+21e5: 00        -         .byte $00  // copy
+21e6: 00 18     -         .word len //len
+21e8: c0 70     -         .word [source & $ffff]
+21ea: 00        -         .byte [(source>>16) & $f]
+21eb: 00 a0     -         .word [dest & $ffff]          // dest
+21ed: 05        -         .byte [(dest>>16) & $f]       // destbnk(0-3) + flags
+21ee: 00 00     -         .word $0000                     // modulo (ignored)
+21f0: a9 30     -         lda #<sprite_pointer
+21f2: 8d 6c d0  -         sta $d06c
+21f5: a9 89     -         lda #>sprite_pointer
+21f7: 8d 6d d0  -         sta $d06d
+21fa: a9 80     -         lda #$80
+21fc: 8d 6e d0  -         sta $d06e
+21ff: a9 80     -         lda #<[sprite_data>>6]
+2201: 8d 30 89  -         sta sprite_pointer
+2204: a9 16     -         lda #>[sprite_data>>6]
+2206: 8d 31 89  -         sta sprite_pointer+1
+2209: a9 01     -         lda #$01
+220b: 8d 6b d0  -         sta $d06b
+220e: a9 01     -         lda #$01
+2210: 8d 57 d0  -         sta $d057
+2213: a9 10     -         lda #16
+2215: 8d 56 d0  -         sta $d056
+2218: a9 ff     -         lda #$ff
+221a: 8d 55 d0  -         sta $d055
+221d: a9 08     -         lda #$08 // sprite multicolor 1
+221f: 8d 25 d0  -         sta $D025
+2222: a9 06     -         lda #$06 // sprite multicolor 2
+2224: 8d 26 d0  -         sta $D026
+2227: a9 6e     -         lda #110
+2229: 8d 00 d0  -         sta $D000
+222c: 8d 01 d0  -         sta $D001
+222f: a9 01     -         lda #$01
+2231: 8d 15 d0  -         sta $d015
+2234: a9 06     -         lda #$06 //BLU
+2236: 8d 27 d0  -         sta $D027
+2239: a9 41     -         lda #char
+223b: 8d 43 d6  -         sta $D643
+223e: b8        -         clv
+223f: a9 0d     -         lda #$0d
+2241: 8d 43 d6  -         sta $D643
+2244: b8        -         clv
+2245: a9 0a     -         lda #$0a
+2247: 8d 43 d6  -         sta $D643
+224a: b8        -         clv
+224b: a3 00     -         ldz #0
+224d: a2 00     -         ldx #0                          // text index
+224f: bd 1c 26  -         lda msg,x
+2252: f0 07     -         beq !endloop+                   // zero terminated text
+2254: 8d 43 d6  -         sta $D643
+2257: b8        -         clv
+2258: e8        -         inx
+2259: 80 f4     -         bra !txtloop-
+225b: b8        -         clv
+225c: a9 0d     -         lda #$0d
+225e: 8d 43 d6  -         sta $D643
+2261: b8        -         clv
+2262: a9 0a     -         lda #$0a
+2264: 8d 43 d6  -         sta $D643
+2267: b8        -         clv
+2268: a3 00     -         ldz #0
+226a: ad 63 d0  - print_ch:lda VICIV_SCRNPTR4 
+226d: 85 07     -         sta ScreenPrintXY+3
+226f: 8d 2d 89  -         sta ScreenPrint+3
+2272: ad 62 d0  -         lda VICIV_SCRNPTR3 
+2275: 85 06     -         sta ScreenPrintXY+2
+2277: 8d 2c 89  -         sta ScreenPrint+2
+227a: ad 61 d0  -         lda VICIV_SCRNPTR2
+227d: 85 05     -         sta ScreenPrintXY+1
+227f: ad 60 d0  -         lda VICIV_SCRNPTR1
+2282: 85 04     -         sta ScreenPrintXY
+2284: a0 14     -         ldy #y
+2286: f0 10     -         beq addx
+2288: a5 04     -         lda ScreenPrintXY
+228a: 18        -         clc
+228b: 69 50     -         adc #NR_BYTE_ROW // A has already screenOffs
+228d: 85 04     -         sta ScreenPrintXY
+228f: a5 05     -         lda ScreenPrintXY+1
+2291: 69 00     -         adc #0
+2293: 85 05     -         sta ScreenPrintXY+1
+2295: 88        -         dey
+2296: d0 f0     -         bne !loop-
+2298: a5 04     - addx:   lda ScreenPrintXY
+229a: 18        -         clc
+229b: 69 1e     -         adc #x
+229d: 69 1e     -         adc #x 
+229f: 85 04     -         sta ScreenPrintXY
+22a1: 8d 2a 89  -         sta ScreenPrint
+22a4: a5 05     -         lda ScreenPrintXY+1
+22a6: 69 00     -         adc #0
+22a8: 85 05     -         sta ScreenPrintXY+1
+22aa: 8d 2b 89  -         sta ScreenPrint+1
+22ad: a9 1e     - print_ch_to_screen:lda #char
+22af: a3 00     -         ldz #$0
+22b1: ea 92 04  -         sta ((ScreenPrintXY)),z
+22b4: a9 00     -         lda #$0
+22b6: a3 01     -         ldz #$1
+22b8: ea 92 04  -         sta ((ScreenPrintXY)),z
+22bb: a2 01     - joyloop:ldx #cycle
+22bd: 2c 11 d0  - loop:   bit $d011
+22c0: 10 fb     -         bpl !-
+22c2: 2c 11 d0  -         bit $d011
+22c5: 30 fb     -         bmi !-
+22c7: ca        -         dex
+22c8: d0 f3     -         bne loop
+22ca: 78        -         sei
+22cb: a9 ff     -         lda #$ff
+22cd: 8d 00 dc  -         sta $dc00
+22d0: ad 01 dc  -         lda $dc01
+22d3: 29 1f     -         and #%00011111
+22d5: 8d 0c 26  -         sta joy1
+22d8: ad 00 dc  -         lda $dc00
+22db: 29 1f     -         and #%00011111
+22dd: 8d 0d 26  -         sta joy2
+22e0: ad 0d 26  -         lda val
+22e3: 29 0f     -         and #mask
+22e5: c9 0e     -         cmp #comp
+22e7: f0 26     -         beq spriteup
+22e9: ad 0d 26  -         lda val
+22ec: 29 0f     -         and #mask
+22ee: c9 0d     -         cmp #comp
+22f0: f0 29     -         beq spritedown
+22f2: ad 0d 26  -         lda val
+22f5: 29 0f     -         and #mask
+22f7: c9 0b     -         cmp #comp
+22f9: f0 2c     -         beq spriterigth
+22fb: ad 0d 26  -         lda val
+22fe: 29 0f     -         and #mask
+2300: c9 07     -         cmp #comp
+2302: f0 2f     -         beq spriteleft
+2304: ad 0d 26  -         lda val
+2307: 29 10     -         and #mask
+2309: c9 00     -         cmp #comp
+230b: f0 32     -         beq spritefire
+230d: 80 ac     -         bra joyloop
+230f: 38        - spriteup:sec
+2310: ad 01 d0  -         lda src
+2313: e9 01     -         sbc #value
+2315: 8d 01 d0  -         sta dst
+2318: 4c bb 22  -         jmp joyloop
+231b: 18        - spritedown:clc
+231c: ad 01 d0  -         lda src
+231f: 69 01     -         adc #value
+2321: 8d 01 d0  -         sta dst
+2324: 4c bb 22  -         jmp joyloop
+2327: 38        - spriterigth:sec
+2328: ad 00 d0  -         lda src
+232b: e9 01     -         sbc #value
+232d: 8d 00 d0  -         sta dst
+2330: 4c bb 22  -         jmp joyloop
+2333: 18        - spriteleft:clc
+2334: ad 00 d0  -         lda src
+2337: 69 01     -         adc #value
+2339: 8d 00 d0  -         sta dst
+233c: 4c bb 22  -         jmp joyloop
+233f: a9 46     - spritefire:lda #char
+2341: 8d 43 d6  -         sta $D643
+2344: b8        -         clv
+2345: a9 0d     -         lda #$0d
+2347: 8d 43 d6  -         sta $D643
+234a: b8        -         clv
+234b: a9 0a     -         lda #$0a
+234d: 8d 43 d6  -         sta $D643
+2350: b8        -         clv
+2351: a3 00     -         ldz #0
+2353: a2 00     -         ldx #0                          // text index
+2355: bd 1c 26  -         lda msg,x
+2358: f0 07     -         beq !endloop+                   // zero terminated text
+235a: 8d 43 d6  -         sta $D643
+235d: b8        -         clv
+235e: e8        -         inx
+235f: 80 f4     -         bra !txtloop-
+2361: b8        -         clv
+2362: a9 0d     -         lda #$0d
+2364: 8d 43 d6  -         sta $D643
+2367: b8        -         clv
+2368: a9 0a     -         lda #$0a
+236a: 8d 43 d6  -         sta $D643
+236d: b8        -         clv
+236e: a3 00     -         ldz #0
+2370: 4c bb 22  -         jmp joyloop
+2373: ad 10 d6  - scroolloop:lda UART_ASCIIKEY
+2376: f0 fb     -         beq !loop-
+2378: 8d 10 d6  -         sta UART_ASCIIKEY
+237b: c9 71     -         cmp #$71                        // compare A to small 'q' ASCII
+237d: f0 1a     -         beq exitscroollop               // end this loop if q was pressed
+237f: c9 61     -         cmp #$61                        // compare A to small 'a' ASCII       
+2381: f0 19     -         beq goup
+2383: c9 7a     -         cmp #$7a                       // compare A to small 'z' ASCII  
+2385: f0 2e     -         beq goudown
+2387: c9 69     -         cmp #$69
+2389: f0 84     -         beq spriteup
+238b: c9 6d     -         cmp #$6d
+238d: f0 8c     -         beq spritedown
+238f: c9 6a     -         cmp #$6a
+2391: f0 94     -         beq spriterigth
+2393: c9 6b     -         cmp #$6b
+2395: f0 9c     -         beq spriteleft
+2397: 80 da     -         bra scroolloop
+2399: 4c d0 23  - exitscroollop:jmp exitloop
+239c: ad 61 d0  - goup:   lda VICIV_SCRNPTR2
+239f: 85 05     -         sta screenOffs+1
+23a1: ad 60 d0  -         lda VICIV_SCRNPTR1
+23a4: 85 04     -         sta screenOffs
+23a6: 18        -         clc
+23a7: 69 50     -         adc #80 // A has already screenOffs
+23a9: 8d 60 d0  -         sta VICIV_SCRNPTR1
+23ac: a5 05     -         lda screenOffs+1
+23ae: 69 00     -         adc #0
+23b0: 8d 61 d0  -         sta VICIV_SCRNPTR2
+23b3: 80 be     -         bra scroolloop
+23b5: ad 61 d0  - goudown:lda VICIV_SCRNPTR2
+23b8: 85 05     -         sta screenOffs+1
+23ba: ad 60 d0  -         lda VICIV_SCRNPTR1
+23bd: 85 04     -         sta screenOffs
+23bf: 18        -         clc
+23c0: e9 4f     -         sbc #80-1 // A has already screenOffs
+23c2: 8d 60 d0  -         sta VICIV_SCRNPTR1
+23c5: b0 02     -         bcs notnegative 
+23c7: c6 05     -         dec screenOffs+1
+23c9: a5 05     - notnegative:lda screenOffs+1
+23cb: 8d 61 d0  -         sta VICIV_SCRNPTR2
+23ce: 80 a3     -         bra scroolloop
+23d0: a2 00     - exitloop:ldx #0                          // text index
+23d2: a0 00     -         ldy #0                          // screen index
+23d4: bd 0e 26  -         lda display_text1,x
+23d7: f0 0d     -         beq !endloop+                   // zero terminated text
+23d9: 99 26 03  -         sta SCREENMEM + 806,y
+23dc: c8        -         iny
+23dd: a9 00     -         lda #0
+23df: 99 26 03  -         sta SCREENMEM + 806,y           // zero high byte for text
+23e2: c8        -         iny
+23e3: e8        -         inx
+23e4: 80 ee     -         bra !txtloop-
+23e6: a9 1e     -         lda #$1E
+23e8: 8d 40 01  -         sta SCREENMEM + 4*80
+23eb: a9 00     -         lda #0
+23ed: 8d 41 01  -         sta SCREENMEM + 4*80 + 1        // write a ^ where the pixel demo ends
+23f0: a9 00     -         lda #$00
+23f2: 8d 02 00  -         sta SCREENMEM + 2
+23f5: a9 10     -         lda #$10
+23f7: 8d 03 00  -         sta SCREENMEM + 3               // write $1001 to first row, second column
+23fa: a9 01     -         lda #$01
+23fc: 8d 04 00  -         sta SCREENMEM + 4
+23ff: a9 10     -         lda #$10
+2401: 8d 05 00  -         sta SCREENMEM + 5        
+2404: a9 02     -         lda #$02
+2406: 8d 06 00  -         sta SCREENMEM + 6
+2409: a9 10     -         lda #$10
+240b: 8d 07 00  -         sta SCREENMEM + 7         
+240e: a9 03     -         lda #$03
+2410: 8d 08 00  -         sta SCREENMEM + 8
+2413: a9 10     -         lda #$10
+2415: 8d 09 00  -         sta SCREENMEM + 9  
+2418: a9 1e     -         lda #$1E        
+241a: 8d 0a 00  -         sta SCREENMEM + 10
+241d: a9 00     -         lda #$0
+241f: 8d 0b 00  -         sta SCREENMEM + 11   
+2422: a9 04     -         lda #$04
+2424: 8d 0c 00  -         sta SCREENMEM + 12
+2427: a9 10     -         lda #$10
+2429: 8d 0d 00  -         sta SCREENMEM + 13         
+242c: a9 05     -         lda #$05
+242e: 8d 0e 00  -         sta SCREENMEM + 14
+2431: a9 10     -         lda #$10
+2433: 8d 0f 00  -         sta SCREENMEM + 15   
+2436: a9 06     -         lda #$06
+2438: 8d 10 00  -         sta SCREENMEM + 16
+243b: a9 10     -         lda #$10
+243d: 8d 11 00  -         sta SCREENMEM + 17   
+2440: a9 07     -         lda #$07
+2442: 8d 12 00  -         sta SCREENMEM + 18
+2445: a9 10     -         lda #$10
+2447: 8d 13 00  -         sta SCREENMEM + 19  
+244a: a9 00     -         lda #<(GRAPHMEM & $ffff)        // setup 32bit ptr to graphmem
+244c: 85 10     -         sta $10
+244e: a9 00     -         lda #>(GRAPHMEM & $ffff)
+2450: 85 11     -         sta $11
+2452: a9 04     -         lda #<(GRAPHMEM>>16)
+2454: 85 12     -         sta $12
+2456: a9 00     -         lda #>(GRAPHMEM>>16)
+2458: 85 13     -         sta $13
+245a: a3 00     -         ldz #0                          // start with zero
+245c: ac 00 01  -         ldy char1-char // carica in y la lunghezza del carattere
+245f: b9 40 6e  - gfxloop:lda char,y
+2462: ea 92 10  -         sta (($10)),z
+2465: 1b        -         inz
+2466: 88        -         dey
+2467: d0 f6     -         bne gfxloop
+2469: e6 11     -         inc $11 // incrementa 
+246b: a3 00     - endloop:ldz #0                          // start with zero
+246d: ac 80 01  -         ldy theend-char1 // carica in y la lunghezza del carattere
+2470: b9 40 6f  - gfxloop1:lda char1,y
+2473: ea 92 10  -         sta (($10)),z
+2476: 1b        -         inz
+2477: 88        -         dey
+2478: d0 f6     -         bne gfxloop1
+247a: a9 00     - endloop1:lda #0
+247c: 8d 02 d7  -         sta DMA_ADDRBANK
+247f: a9 24     -         lda #>!fcm_dma+
+2481: 8d 01 d7  -         sta DMA_ADDRMSB
+2484: a9 8b     -         lda #<!fcm_dma+
+2486: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+2489: 80 17     -         bra !fcm_dma_end+
+248b: 0a        -         .byte $0a                       // 11 byte mode
+248c: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+248e: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+2490: 8b 00     -         .byte $8b, <slope               // line slope
+2492: 8c 20     -         .byte $8c, >slope               // line slope
+2494: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+2496: 00        -         .byte $00                       // eol
+2497: 03        -         .byte DMA_FILL
+2498: 96 00     -         .word 150                       // 150 px?
+249a: 01 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+249c: 00        -         .byte $00                       // src bank (ignored)
+249d: 80 13     -         .word [start & $ffff]           // dest
+249f: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+24a0: 00 00     -         .word $0000                     // modulo (ignored)
+24a2: a9 00     -         lda #0
+24a4: 8d 02 d7  -         sta DMA_ADDRBANK
+24a7: a9 24     -         lda #>!fcm_dma+
+24a9: 8d 01 d7  -         sta DMA_ADDRMSB
+24ac: a9 b3     -         lda #<!fcm_dma+
+24ae: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+24b1: 80 17     -         bra !fcm_dma_end+
+24b3: 0a        -         .byte $0a                       // 11 byte mode
+24b4: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+24b6: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+24b8: 8b 00     -         .byte $8b, <slope               // line slope
+24ba: 8c 40     -         .byte $8c, >slope               // line slope
+24bc: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+24be: 00        -         .byte $00                       // eol
+24bf: 03        -         .byte DMA_FILL
+24c0: 96 00     -         .word 150                       // 150 px?
+24c2: 02 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+24c4: 00        -         .byte $00                       // src bank (ignored)
+24c5: 80 13     -         .word [start & $ffff]           // dest
+24c7: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+24c8: 00 00     -         .word $0000                     // modulo (ignored)
+24ca: a9 00     -         lda #0
+24cc: 8d 02 d7  -         sta DMA_ADDRBANK
+24cf: a9 24     -         lda #>!fcm_dma+
+24d1: 8d 01 d7  -         sta DMA_ADDRMSB
+24d4: a9 db     -         lda #<!fcm_dma+
+24d6: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+24d9: 80 17     -         bra !fcm_dma_end+
+24db: 0a        -         .byte $0a                       // 11 byte mode
+24dc: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+24de: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+24e0: 8b 00     -         .byte $8b, <slope               // line slope
+24e2: 8c 60     -         .byte $8c, >slope               // line slope
+24e4: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+24e6: 00        -         .byte $00                       // eol
+24e7: 03        -         .byte DMA_FILL
+24e8: 96 00     -         .word 150                       // 150 px?
+24ea: 03 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+24ec: 00        -         .byte $00                       // src bank (ignored)
+24ed: 80 13     -         .word [start & $ffff]           // dest
+24ef: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+24f0: 00 00     -         .word $0000                     // modulo (ignored)
+24f2: a9 00     -         lda #0
+24f4: 8d 02 d7  -         sta DMA_ADDRBANK
+24f7: a9 25     -         lda #>!fcm_dma+
+24f9: 8d 01 d7  -         sta DMA_ADDRMSB
+24fc: a9 03     -         lda #<!fcm_dma+
+24fe: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+2501: 80 17     -         bra !fcm_dma_end+
+2503: 0a        -         .byte $0a                       // 11 byte mode
+2504: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+2506: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+2508: 8b 00     -         .byte $8b, <slope               // line slope
+250a: 8c 80     -         .byte $8c, >slope               // line slope
+250c: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+250e: 00        -         .byte $00                       // eol
+250f: 03        -         .byte DMA_FILL
+2510: 96 00     -         .word 150                       // 150 px?
+2512: 04 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+2514: 00        -         .byte $00                       // src bank (ignored)
+2515: 80 13     -         .word [start & $ffff]           // dest
+2517: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+2518: 00 00     -         .word $0000                     // modulo (ignored)
+251a: a9 00     -         lda #0
+251c: 8d 02 d7  -         sta DMA_ADDRBANK
+251f: a9 25     -         lda #>!fcm_dma+
+2521: 8d 01 d7  -         sta DMA_ADDRMSB
+2524: a9 2b     -         lda #<!fcm_dma+
+2526: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+2529: 80 17     -         bra !fcm_dma_end+
+252b: 0a        -         .byte $0a                       // 11 byte mode
+252c: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+252e: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+2530: 8b 00     -         .byte $8b, <slope               // line slope
+2532: 8c a0     -         .byte $8c, >slope               // line slope
+2534: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+2536: 00        -         .byte $00                       // eol
+2537: 03        -         .byte DMA_FILL
+2538: 96 00     -         .word 150                       // 150 px?
+253a: 05 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+253c: 00        -         .byte $00                       // src bank (ignored)
+253d: 80 13     -         .word [start & $ffff]           // dest
+253f: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+2540: 00 00     -         .word $0000                     // modulo (ignored)
+2542: a9 00     -         lda #0
+2544: 8d 02 d7  -         sta DMA_ADDRBANK
+2547: a9 25     -         lda #>!fcm_dma+
+2549: 8d 01 d7  -         sta DMA_ADDRMSB
+254c: a9 53     -         lda #<!fcm_dma+
+254e: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+2551: 80 17     -         bra !fcm_dma_end+
+2553: 0a        -         .byte $0a                       // 11 byte mode
+2554: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+2556: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+2558: 8b 00     -         .byte $8b, <slope               // line slope
+255a: 8c c0     -         .byte $8c, >slope               // line slope
+255c: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+255e: 00        -         .byte $00                       // eol
+255f: 03        -         .byte DMA_FILL
+2560: 96 00     -         .word 150                       // 150 px?
+2562: 06 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+2564: 00        -         .byte $00                       // src bank (ignored)
+2565: 80 13     -         .word [start & $ffff]           // dest
+2567: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+2568: 00 00     -         .word $0000                     // modulo (ignored)
+256a: a9 00     -         lda #0
+256c: 8d 02 d7  -         sta DMA_ADDRBANK
+256f: a9 25     -         lda #>!fcm_dma+
+2571: 8d 01 d7  -         sta DMA_ADDRMSB
+2574: a9 7b     -         lda #<!fcm_dma+
+2576: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+2579: 80 17     -         bra !fcm_dma_end+
+257b: 0a        -         .byte $0a                       // 11 byte mode
+257c: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+257e: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+2580: 8b 00     -         .byte $8b, <slope               // line slope
+2582: 8c e0     -         .byte $8c, >slope               // line slope
+2584: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+2586: 00        -         .byte $00                       // eol
+2587: 03        -         .byte DMA_FILL
+2588: 96 00     -         .word 150                       // 150 px?
+258a: 07 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+258c: 00        -         .byte $00                       // src bank (ignored)
+258d: 80 13     -         .word [start & $ffff]           // dest
+258f: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+2590: 00 00     -         .word $0000                     // modulo (ignored)
+2592: a9 00     -         lda #0
+2594: 8d 02 d7  -         sta DMA_ADDRBANK
+2597: a9 25     -         lda #>!fcm_dma+
+2599: 8d 01 d7  -         sta DMA_ADDRMSB
+259c: a9 a3     -         lda #<!fcm_dma+
+259e: 8d 05 d7  -         sta DMA_ADDRLSB_ETRIG   // clear screen & charram
+25a1: 80 17     -         bra !fcm_dma_end+
+25a3: 0a        -         .byte $0a                       // 11 byte mode
+25a4: 87 38     -         .byte $87, [(1600-8) & $ff]     // vertical stripe increment
+25a6: 88 06     -         .byte $88, [(1600-8) >> 8]      // = 64*25 - 8
+25a8: 8b ff     -         .byte $8b, <slope               // line slope
+25aa: 8c ff     -         .byte $8c, >slope               // line slope
+25ac: 8f c0     -         .byte $8f, $c0                  // line draw, y, positive
+25ae: 00        -         .byte $00                       // eol
+25af: 03        -         .byte DMA_FILL
+25b0: 96 00     -         .word 150                       // 150 px?
+25b2: 08 00     -         .word [colour & $ff]            // colour code to fill with, one byte
+25b4: 00        -         .byte $00                       // src bank (ignored)
+25b5: 80 13     -         .word [start & $ffff]           // dest
+25b7: 04        -         .byte [start>>16 & $f]          // destbnk(0-3) + flags
+25b8: 00 00     -         .word $0000                     // modulo (ignored)
+25ba: ad 10 d6  -         lda UART_ASCIIKEY
+25bd: f0 fb     -         beq !loop-
+25bf: 8d 10 d6  -         sta UART_ASCIIKEY
+25c2: a5 f0     - exit:   lda vicstate
+25c4: 8d 31 d0  -         sta VICIII_SCRNMODE
+25c7: a5 f1     -         lda vicstate+1
+25c9: 8d 54 d0  -         sta VICIV_SCRNMODE
+25cc: a5 f6     -         lda vicstate+6
+25ce: 8d 58 d0  -         sta VICIV_LINESTEPLO
+25d1: a5 f7     -         lda vicstate+7
+25d3: 8d 59 d0  -         sta VICIV_LINESTEPHI
+25d6: a5 f9     -         lda vicstate+9
+25d8: 8d 5e d0  -         sta VICIV_CHRCOUNT
+25db: a5 f2     -         lda vicstate+2
+25dd: 8d 60 d0  -         sta VICIV_SCRNPTR1
+25e0: a5 f3     -         lda vicstate+3
+25e2: 8d 61 d0  -         sta VICIV_SCRNPTR2
+25e5: a5 f4     -         lda vicstate+4
+25e7: 8d 62 d0  -         sta VICIV_SCRNPTR3
+25ea: a5 f5     -         lda vicstate+5
+25ec: 8d 63 d0  -         sta VICIV_SCRNPTR4
+25ef: a5 f8     -         lda vicstate+8
+25f1: 8d 70 d0  -         sta VICIV_PALETTE
+25f4: a5 fa     -         lda vicstate+10
+25f6: 8d 64 d0  -         sta VICIV_COLPTRLO
+25f9: a5 fb     -         lda vicstate+11
+25fb: 8d 65 d0  -         sta VICIV_COLPTRHI
+25fe: a5 fc     -         lda vicstate+12
+2600: 8d 21 d0  -         sta VICIV_SCREENCOL
+2603: a5 fd     -         lda vicstate+13
+2605: 8d 20 d0  -         sta VICIV_BORDERCOL
+2608: a9 00     -         lda #0
+260a: 5b        -         tab
+260b: 60        -         rts
+260c: 00        - joystick1:.byte $00
+260d: 00        - joystick2:.byte $00
+260e: 10 12 05 13 13 20 01 0e 19 20 0b 05 19           - display_text1:.text "press any key"
+261b: 00        -         .byte 0
+261c: 44 45 42 55 47                                   - debug_text:.text "DEBUG"
+2621: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  -         .align 64
+2631: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    
+2640: 00 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00  - Screen: .import binary "fcm_scr_job_40x25_16bit.bin"
+2660: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2680: 01 00 01 00 01 00 01 00 01 00 01 00 00 00 00 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+26a0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+26c0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 00 00 
+26e0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2700: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2720: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2740: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2760: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2780: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+27a0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+27c0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+27e0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2800: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2820: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2840: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2860: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2880: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+28a0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+28c0: 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 01 00 01 00 00 00 00 00 
+28e0: 00 00 01 00 01 00 01 00 00 00 00 00 00 00 01 00 01 00 01 00 01 00 01 00 00 00 00 00 00 00 01 00 
+2900: 01 00 00 00 00 00 00 00 00 00 00 00 01 00 01 00 01 00 01 00 00 00 00 00 01 00 00 00 00 00 01 00 
+2920: 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 
+2940: 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2960: 01 00 01 00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 
+2980: 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 
+29a0: 01 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 
+29c0: 00 00 00 00 00 00 01 00 01 00 00 00 01 00 00 00 00 00 00 00 01 00 00 00 01 00 01 00 01 00 00 00 
+29e0: 01 00 01 00 01 00 00 00 00 00 00 00 00 00 01 00 01 00 00 00 00 00 00 00 00 00 01 00 01 00 01 00 
+2a00: 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 
+2a20: 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 
+2a40: 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 
+2a60: 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 00 00 01 00 01 00 01 00 00 00 
+2a80: 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 
+2aa0: 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 
+2ac0: 01 00 00 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 
+2ae0: 01 00 00 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 01 00 
+2b00: 00 00 00 00 00 00 00 00 01 00 01 00 00 00 00 00 00 00 01 00 01 00 00 00 01 00 01 00 01 00 00 00 
+2b20: 01 00 01 00 01 00 01 00 00 00 00 00 00 00 01 00 01 00 01 00 00 00 00 00 00 00 01 00 01 00 01 00 
+2b40: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2b60: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2b80: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2ba0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2bc0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2be0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2c00: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2c20: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2c40: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2c60: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2c80: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2ca0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2cc0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2ce0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2d00: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2d20: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2d40: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2d60: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2d80: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2da0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 00 00 
+2dc0: 00 00 00 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2de0: 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 01 00 
+2e00: 01 00 01 00 01 00 01 00 01 00 01 00 00 00 00 00                                                 
+2e10: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  - Screen_end:.align 64
+2e20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2e30: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2e40: 07 03 03 03 03 03 03 07 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00  - Chars:  .import binary "fcm_charset_job_40x25_16bit.bin"
+2e60: 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00 00 0b 0b 0b 0b 0b 00 00 
+2e80: 02 02 00 02 02 02 02 02 00 00 00 00 00 00 00 00 02 02 02 02 02 02 00 02 02 02 02 02 02 02 00 02 
+2ea0: 02 02 02 02 02 02 00 02 00 00 00 00 00 00 00 00 02 02 00 02 02 02 02 02 02 02 00 02 02 02 02 02 
+2ec0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2ee0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2f20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2f40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2f60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2fa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2fc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+2fe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3020: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3040: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3060: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+30a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+30c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+30e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3120: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3140: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+31a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+31c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+31e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3220: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3260: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+32a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+32c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+32e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3320: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3340: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3360: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+33a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+33c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+33e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3420: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3440: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3460: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+34a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+34c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+34e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3520: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3540: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3560: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3580: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+35a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+35c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+35e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3600: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3620: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3640: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3660: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3680: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+36a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+36c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+36e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3700: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3720: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3740: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3760: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+37a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+37c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+37e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3820: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3840: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3860: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+38a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+38c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+38e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3920: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3940: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3960: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+39a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+39c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+39e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3a00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3a20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3a40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3a60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3a80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3aa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ac0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ae0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3b00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3b20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3b40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3b60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3b80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ba0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3bc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3be0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3c00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3c20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3c40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3c60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3c80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ca0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3cc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ce0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3d00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3d20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3d40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3d60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3d80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3da0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3dc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3de0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3e00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3e20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3e40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3e60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ea0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ec0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3ee0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3f20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3f40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3f60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3fa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3fc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+3fe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4020: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4040: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4060: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+40a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+40c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+40e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4120: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4140: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+41a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+41c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+41e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4220: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4260: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+42a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+42c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+42e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4320: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4340: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4360: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+43a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+43c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+43e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4420: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4440: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4460: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+44a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+44c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+44e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4520: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4540: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4560: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4580: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+45a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+45c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+45e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4600: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4620: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4640: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4660: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4680: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+46a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+46c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+46e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4700: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4720: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4740: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4760: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+47a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+47c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+47e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4820: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4840: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4860: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+48a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+48c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+48e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4920: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4940: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4960: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+49a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+49c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+49e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4a00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4a20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4a40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4a60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4a80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4aa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ac0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ae0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4b00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4b20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4b40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4b60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4b80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ba0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4bc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4be0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4c00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4c20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4c40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4c60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4c80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ca0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4cc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ce0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4d00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4d20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4d40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4d60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4d80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4da0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4dc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4de0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4e00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4e20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4e40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4e60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ea0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ec0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4ee0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4f20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4f40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4f60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4fa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4fc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+4fe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5020: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5040: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5060: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+50a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+50c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+50e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5120: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5140: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+51a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+51c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+51e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5220: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5260: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+52a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+52c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+52e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5320: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5340: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5360: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+53a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+53c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+53e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5420: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5440: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5460: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+54a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+54c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+54e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5520: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5540: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5560: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5580: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+55a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+55c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+55e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5600: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5620: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5640: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5660: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5680: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+56a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+56c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+56e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5700: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5720: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5740: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5760: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+57a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+57c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+57e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5820: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5840: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5860: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+58a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+58c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+58e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5920: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5940: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5960: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+59a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+59c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+59e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5a00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5a20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5a40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5a60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5a80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5aa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ac0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ae0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5b00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5b20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5b40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5b60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5b80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ba0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5bc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5be0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5c00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5c20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5c40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5c60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5c80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ca0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5cc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ce0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5d00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5d20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5d40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5d60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5d80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5da0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5dc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5de0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5e00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5e20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5e40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5e60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ea0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ec0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5ee0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5f20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5f40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5f60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5fa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5fc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+5fe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6020: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6040: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6060: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+60a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+60c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+60e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6120: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6140: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+61a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+61c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+61e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6220: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6260: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+62a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+62c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+62e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6320: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6340: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6360: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+63a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+63c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+63e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6420: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6440: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6460: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+64a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+64c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+64e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6520: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6540: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6560: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6580: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+65a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+65c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+65e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6600: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6620: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6640: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6660: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6680: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+66a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+66c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+66e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6700: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6720: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6740: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6760: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+67a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+67c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+67e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6820: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6840: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6860: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+68a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+68c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+68e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6920: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6940: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6960: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+69a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+69c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+69e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6a00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6a20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6a40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6a60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6a80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6aa0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6ac0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6ae0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6b00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6b20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6b40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6b60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6b80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6ba0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6bc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6be0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6c00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6c20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6c40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6c60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6c80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6ca0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6cc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6ce0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6d00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6d20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6d40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6d60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6d80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6da0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6dc0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6de0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6e00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6e20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+6e40: 00 05 00 05 00 05 00 05 00 05 00 05 00 05 00 05  - char:   .fill 16, [$00,$05,$00,$05] //1000
+6e50: 00 05 00 05 00 05 00 05 00 05 00 05 00 05 00 05 
+6e60: 00 05 00 05 00 05 00 05 00 05 00 05 00 05 00 05 
+6e70: 00 05 00 05 00 05 00 05 00 05 00 05 00 05 00 05 
+6e80: 00 02 00 02 00 02 00 02 00 02 00 02 00 02 00 02  -         .fill 16, [$00,$02,$00,$02]
+6e90: 00 02 00 02 00 02 00 02 00 02 00 02 00 02 00 02 
+6ea0: 00 02 00 02 00 02 00 02 00 02 00 02 00 02 00 02 
+6eb0: 00 02 00 02 00 02 00 02 00 02 00 02 00 02 00 02 
+6ec0: ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33  -         .fill 16, [$ff,$33,$ff,$33]
+6ed0: ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 
+6ee0: ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 
+6ef0: ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 ff 33 
+6f00: 11 ff ff 11 11 ff ff 11 11 ff ff 11 11 ff ff 11  -         .fill 16, [$11,$ff,$ff,$11]    
+6f10: 11 ff ff 11 11 ff ff 11 11 ff ff 11 11 ff ff 11 
+6f20: 11 ff ff 11 11 ff ff 11 11 ff ff 11 11 ff ff 11 
+6f30: 11 ff ff 11 11 ff ff 11 11 ff ff 11 11 ff ff 11 
+6f40: 22 33 33 22 22 33 33 22 22 33 33 22 22 33 33 22  - char1:  .fill 16, [$22,$33,$33,$22]   
+6f50: 22 33 33 22 22 33 33 22 22 33 33 22 22 33 33 22 
+6f60: 22 33 33 22 22 33 33 22 22 33 33 22 22 33 33 22 
+6f70: 22 33 33 22 22 33 33 22 22 33 33 22 22 33 33 22 
+6f80: 00 11 11 00 00 11 11 00 00 11 11 00 00 11 11 00  -         .fill 16, [$00,$11,$11,$00]    
+6f90: 00 11 11 00 00 11 11 00 00 11 11 00 00 11 11 00 
+6fa0: 00 11 11 00 00 11 11 00 00 11 11 00 00 11 11 00 
+6fb0: 00 11 11 00 00 11 11 00 00 11 11 00 00 11 11 00 
+6fc0: 00 22 22 00 00 22 22 00 00 22 22 00 00 22 22 00  -         .fill 16, [$00,$22,$22,$00]    
+6fd0: 00 22 22 00 00 22 22 00 00 22 22 00 00 22 22 00 
+6fe0: 00 22 22 00 00 22 22 00 00 22 22 00 00 22 22 00 
+6ff0: 00 22 22 00 00 22 22 00 00 22 22 00 00 22 22 00 
+7000: 55 33 33 55 55 33 33 55 55 33 33 55 55 33 33 55  -         .fill 16, [$55,$33,$33,$55]   
+7010: 55 33 33 55 55 33 33 55 55 33 33 55 55 33 33 55 
+7020: 55 33 33 55 55 33 33 55 55 33 33 55 55 33 33 55 
+7030: 55 33 33 55 55 33 33 55 55 33 33 55 55 33 33 55 
+7040: 07 03 03 03 03 03 03 07 0b 07 07 07 07 07 07 00  - char2:  .byte $07,$03,$03,$03,$03,$03,$03,$07,$0b,$07,$07,$07,$07,$07,$07,$00,$0b,$07,$07,$07,$07,$07,$07,$00,$0b,$07,$07,$07,$07,$07,$07,$00,$0b,$07,$07,$07,$07,$07,$07,$00,$0b,$07,$07,$07,$07,$07,$07,$00,$0b,$07,$07,$07,$07,$07,$07,$00,$00,$0b,$0b,$0b,$0b,$0b,$00,$00
+7050: 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00 
+7060: 0b 07 07 07 07 07 07 00 0b 07 07 07 07 07 07 00 
+7070: 0b 07 07 07 07 07 07 00 00 0b 0b 0b 0b 0b 00 00 
+7080: 02 02 00 02 02 02 02 02 00 00 00 00 00 00 00 00  -         .byte $02,$02,$00,$02,$02,$02,$02,$02,$00,$00,$00,$00,$00,$00,$00,$00,$02,$02,$02,$02,$02,$02,$00,$02,$02,$02,$02,$02,$02,$02,$00,$02,$02,$02,$02,$02,$02,$02,$00,$02,$00,$00,$00,$00,$00,$00,$00,$00,$02,$02,$00,$02,$02,$02,$02,$02,$02,$02,$00,$02,$02,$02,$02,$02
+7090: 02 02 02 02 02 02 00 02 02 02 02 02 02 02 00 02 
+70a0: 02 02 02 02 02 02 00 02 00 00 00 00 00 00 00 00 
+70b0: 02 02 00 02 02 02 02 02 02 02 00 02 02 02 02 02 
+70c0: 00 00 00 00 00 00 00 00                          - theend,sprite_data_begin,sprite_0,spr_img_0_0:.byte $00,$00,$00,$00,$00,$00,$00,$0
+70c8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+70d0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+70d8: 00 00 11 21 12 10 00 00                          -         .byte $00,$00,$11,$21,$12,$10,$00,$00
+70e0: 00 00 11 21 12 10 00 00                          -         .byte $00,$00,$11,$21,$12,$10,$00,$00
+70e8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+70f0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+70f8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7100: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7108: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7110: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7118: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7120: 00 00 10 00 01 00 00 00                          -         .byte $00,$00,$10,$00,$01,$00,$00,$00
+7128: 00 01 10 00 01 10 00 00                          -         .byte $00,$01,$10,$00,$01,$10,$00,$00
+7130: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7138: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7140: 00 00 00 00 00 00 00 00                          - spr_img_1_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7148: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7150: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7158: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7160: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7168: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7170: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7178: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7180: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7188: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7190: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7198: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+71a0: 00 00 10 00 01 00 00 00                          -         .byte $00,$00,$10,$00,$01,$00,$00,$00
+71a8: 00 01 10 00 01 10 00 00                          -         .byte $00,$01,$10,$00,$01,$10,$00,$00
+71b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+71b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+71c0: 00 00 00 00 00 00 00 00                          - spr_img_2_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+71c8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+71d0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+71d8: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+71e0: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+71e8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+71f0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+71f8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7200: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7208: 00 01 11 11 11 11 00 00                          -         .byte $00,$01,$11,$11,$11,$11,$00,$00
+7210: 00 01 11 11 11 11 00 00                          -         .byte $00,$01,$11,$11,$11,$11,$00,$00
+7218: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7220: 00 00 01 00 11 00 00 00                          -         .byte $00,$00,$01,$00,$11,$00,$00,$00
+7228: 00 00 01 10 00 00 00 00                          -         .byte $00,$00,$01,$10,$00,$00,$00,$00
+7230: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7238: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7240: 00 00 01 11 11 00 00 00                          - spr_img_3_0:.byte $00,$00,$01,$11,$11,$00,$00,$00
+7248: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7250: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+7258: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+7260: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7268: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7270: 00 00 01 11 11 11 00 00                          -         .byte $00,$00,$01,$11,$11,$11,$00,$00
+7278: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7280: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7288: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7290: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7298: 00 01 11 00 00 11 10 00                          -         .byte $00,$01,$11,$00,$00,$11,$10,$00
+72a0: 00 01 00 00 00 11 00 00                          -         .byte $00,$01,$00,$00,$00,$11,$00,$00
+72a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+72b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+72b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+72c0: 00 00 00 00 00 00 00 00                          - spr_img_4_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+72c8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+72d0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+72d8: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+72e0: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+72e8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+72f0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+72f8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7300: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7308: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7310: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7318: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7320: 00 00 01 10 01 00 00 00                          -         .byte $00,$00,$01,$10,$01,$00,$00,$00
+7328: 00 00 00 00 01 10 00 00                          -         .byte $00,$00,$00,$00,$01,$10,$00,$00
+7330: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7338: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7340: 00 00 00 00 00 00 00 00                          - spr_img_5_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7348: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7350: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+7358: 00 00 11 12 11 20 00 00                          -         .byte $00,$00,$11,$12,$11,$20,$00,$00
+7360: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7368: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7370: 01 10 11 11 11 10 10 00                          -         .byte $01,$10,$11,$11,$11,$10,$10,$00
+7378: 01 11 11 11 11 01 10 00                          -         .byte $01,$11,$11,$11,$11,$01,$10,$00
+7380: 00 11 11 11 11 11 00 00                          -         .byte $00,$11,$11,$11,$11,$11,$00,$00
+7388: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7390: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7398: 00 00 11 11 11 11 10 00                          -         .byte $00,$00,$11,$11,$11,$11,$10,$00
+73a0: 00 11 10 00 00 11 00 00                          -         .byte $00,$11,$10,$00,$00,$11,$00,$00
+73a8: 00 10 00 00 00 00 00 00                          -         .byte $00,$10,$00,$00,$00,$00,$00,$00
+73b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+73b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+73c0: 00 00 00 00 00 00 00 00                          - spr_img_6_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+73c8: 00 01 11 11 00 00 00 00                          -         .byte $00,$01,$11,$11,$00,$00,$00,$00
+73d0: 00 11 11 11 10 00 00 00                          -         .byte $00,$11,$11,$11,$10,$00,$00,$00
+73d8: 00 11 12 11 20 00 00 00                          -         .byte $00,$11,$12,$11,$20,$00,$00,$00
+73e0: 00 11 12 11 20 00 00 00                          -         .byte $00,$11,$12,$11,$20,$00,$00,$00
+73e8: 00 11 11 11 10 00 00 00                          -         .byte $00,$11,$11,$11,$10,$00,$00,$00
+73f0: 00 11 11 11 10 00 00 00                          -         .byte $00,$11,$11,$11,$10,$00,$00,$00
+73f8: 00 01 11 11 01 10 00 00                          -         .byte $00,$01,$11,$11,$01,$10,$00,$00
+7400: 01 11 11 11 11 10 00 00                          -         .byte $01,$11,$11,$11,$11,$10,$00,$00
+7408: 01 11 11 11 11 00 00 00                          -         .byte $01,$11,$11,$11,$11,$00,$00,$00
+7410: 01 11 11 11 00 00 00 00                          -         .byte $01,$11,$11,$11,$00,$00,$00,$00
+7418: 00 01 11 11 10 00 00 00                          -         .byte $00,$01,$11,$11,$10,$00,$00,$00
+7420: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7428: 00 00 11 00 11 00 00 00                          -         .byte $00,$00,$11,$00,$11,$00,$00,$00
+7430: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7438: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7440: 00 00 00 00 00 00 00 00                          - spr_img_7_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7448: 00 00 00 00 11 11 10 00                          -         .byte $00,$00,$00,$00,$11,$11,$10,$00
+7450: 00 00 00 01 11 11 11 00                          -         .byte $00,$00,$00,$01,$11,$11,$11,$00
+7458: 00 00 00 01 11 21 12 00                          -         .byte $00,$00,$00,$01,$11,$21,$12,$00
+7460: 00 00 00 01 11 21 12 00                          -         .byte $00,$00,$00,$01,$11,$21,$12,$00
+7468: 10 00 00 01 11 11 11 00                          -         .byte $10,$00,$00,$01,$11,$11,$11,$00
+7470: 01 11 11 11 11 11 11 00                          -         .byte $01,$11,$11,$11,$11,$11,$11,$00
+7478: 00 00 11 11 11 11 10 00                          -         .byte $00,$00,$11,$11,$11,$11,$10,$00
+7480: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7488: 01 11 11 11 11 00 00 00                          -         .byte $01,$11,$11,$11,$11,$00,$00,$00
+7490: 10 00 00 00 00 00 00 00                          -         .byte $10,$00,$00,$00,$00,$00,$00,$00
+7498: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74c0: 00 00 00 00 00 00 00 00                          - spr_img_8_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+74c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+74e8: 00 00 00 11 00 11 00 00                          -         .byte $00,$00,$00,$11,$00,$11,$00,$00
+74f0: 00 00 00 01 11 10 00 00                          -         .byte $00,$00,$00,$01,$11,$10,$00,$00
+74f8: 00 00 01 11 11 11 10 00                          -         .byte $00,$00,$01,$11,$11,$11,$10,$00
+7500: 00 00 00 01 11 10 00 00                          -         .byte $00,$00,$00,$01,$11,$10,$00,$00
+7508: 00 00 00 11 00 11 00 00                          -         .byte $00,$00,$00,$11,$00,$11,$00,$00
+7510: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7518: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7520: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7528: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7530: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7538: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7540: 00 00 00 00 00 00 00 00                          - spr_img_9_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7548: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7550: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7558: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7560: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7568: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7570: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7578: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7580: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7588: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7590: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7598: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75a8: 00 01 00 00 00 00 10 00                          -         .byte $00,$01,$00,$00,$00,$00,$10,$00
+75b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75c0: 00 00 00 00 00 00 00 00                          - spr_img_10_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+75c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+75f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7600: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7608: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7610: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7618: 01 00 00 00 00 00 00 10                          -         .byte $01,$00,$00,$00,$00,$00,$00,$10
+7620: 00 01 00 00 00 00 10 00                          -         .byte $00,$01,$00,$00,$00,$00,$10,$00
+7628: 01 01 00 00 00 00 10 10                          -         .byte $01,$01,$00,$00,$00,$00,$10,$10
+7630: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7638: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7640: 00 00 00 00 00 00 00 00                          - spr_img_11_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7648: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7650: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7658: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7660: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7668: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7670: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7678: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7680: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7688: 01 00 00 00 00 00 00 10                          -         .byte $01,$00,$00,$00,$00,$00,$00,$10
+7690: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7698: 00 10 00 00 00 00 01 00                          -         .byte $00,$10,$00,$00,$00,$00,$01,$00
+76a0: 10 01 00 00 00 00 10 01                          -         .byte $10,$01,$00,$00,$00,$00,$10,$01
+76a8: 00 00 10 00 00 01 00 00                          -         .byte $00,$00,$10,$00,$00,$01,$00,$00
+76b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76c0: 00 00 00 00 00 00 00 00                          - spr_img_12_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+76c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+76f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7700: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7708: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7710: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+7718: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7720: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7728: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7730: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7738: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7740: 00 00 00 00 00 00 00 00                          - spr_img_13_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7748: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7750: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7758: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7760: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7768: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7770: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7778: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7780: 00 00 00 00 10 10 00 00                          -         .byte $00,$00,$00,$00,$10,$10,$00,$00
+7788: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7790: 00 00 00 00 01 10 00 00                          -         .byte $00,$00,$00,$00,$01,$10,$00,$00
+7798: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77c0: 00 00 00 00 00 00 00 00                          - spr_img_14_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+77c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+77e8: 00 00 00 00 01 00 00 00                          -         .byte $00,$00,$00,$00,$01,$00,$00,$00
+77f0: 00 00 00 10 00 00 00 00                          -         .byte $00,$00,$00,$10,$00,$00,$00,$00
+77f8: 00 00 00 00 10 00 00 00                          -         .byte $00,$00,$00,$00,$10,$00,$00,$00
+7800: 00 00 00 00 01 00 00 00                          -         .byte $00,$00,$00,$00,$01,$00,$00,$00
+7808: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+7810: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7818: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7820: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7828: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7830: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7838: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7840: 00 00 00 00 00 00 00 00                          - spr_img_15_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7848: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7850: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7858: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7860: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7868: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7870: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+7878: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7880: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7888: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7890: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7898: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+78a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78c0: 00 00 00 00 00 00 00 00                          - spr_img_16_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+78c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+78e8: 00 00 00 00 01 00 00 00                          -         .byte $00,$00,$00,$00,$01,$00,$00,$00
+78f0: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+78f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7900: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7908: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7910: 00 00 00 00 01 00 00 00                          -         .byte $00,$00,$00,$00,$01,$00,$00,$00
+7918: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+7920: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7928: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7930: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7938: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7940: 00 00 00 00 00 00 00 00                          - spr_img_17_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7948: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7950: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7958: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7960: 00 00 00 00 10 00 00 00                          -         .byte $00,$00,$00,$00,$10,$00,$00,$00
+7968: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7970: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+7978: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7980: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7988: 00 00 00 00 10 00 00 00                          -         .byte $00,$00,$00,$00,$10,$00,$00,$00
+7990: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7998: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+79a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79c0: 00 00 00 00 00 00 00 00                          - spr_img_18_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+79c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+79f8: 00 00 00 00 10 00 00 00                          -         .byte $00,$00,$00,$00,$10,$00,$00,$00
+7a00: 00 00 00 01 01 00 00 00                          -         .byte $00,$00,$00,$01,$01,$00,$00,$00
+7a08: 00 00 00 00 10 00 00 00                          -         .byte $00,$00,$00,$00,$10,$00,$00,$00
+7a10: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a18: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a20: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a28: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a40: 00 00 00 00 00 00 00 00                          - spr_img_19_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7a48: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a50: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a58: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a60: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a68: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a70: 00 00 01 00 00 01 00 00                          -         .byte $00,$00,$01,$00,$00,$01,$00,$00
+7a78: 00 00 00 10 00 10 00 00                          -         .byte $00,$00,$00,$10,$00,$10,$00,$00
+7a80: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7a88: 00 00 00 10 00 10 00 00                          -         .byte $00,$00,$00,$10,$00,$10,$00,$00
+7a90: 00 00 01 00 00 01 00 00                          -         .byte $00,$00,$01,$00,$00,$01,$00,$00
+7a98: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7aa0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7aa8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ab0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ab8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ac0: 00 00 00 00 00 00 00 00                          - spr_img_20_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7ac8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ad0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ad8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ae0: 00 00 01 00 00 01 00 00                          -         .byte $00,$00,$01,$00,$00,$01,$00,$00
+7ae8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7af0: 00 01 01 00 00 01 01 00                          -         .byte $00,$01,$01,$00,$00,$01,$01,$00
+7af8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b00: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b08: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b10: 00 01 01 00 00 01 01 00                          -         .byte $00,$01,$01,$00,$00,$01,$01,$00
+7b18: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b20: 00 00 01 00 00 01 00 00                          -         .byte $00,$00,$01,$00,$00,$01,$00,$00
+7b28: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b40: 00 00 00 00 00 00 00 00                          - spr_img_21_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7b48: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b50: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b58: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7b60: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+7b68: 00 00 01 10 00 00 00 00                          -         .byte $00,$00,$01,$10,$00,$00,$00,$00
+7b70: 00 00 01 11 00 00 00 00                          -         .byte $00,$00,$01,$11,$00,$00,$00,$00
+7b78: 00 00 01 11 10 00 00 00                          -         .byte $00,$00,$01,$11,$10,$00,$00,$00
+7b80: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7b88: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7b90: 00 00 01 11 11 11 00 00                          -         .byte $00,$00,$01,$11,$11,$11,$00,$00
+7b98: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7ba0: 00 00 00 10 01 10 00 00                          -         .byte $00,$00,$00,$10,$01,$10,$00,$00
+7ba8: 00 00 00 11 00 00 00 00                          -         .byte $00,$00,$00,$11,$00,$00,$00,$00
+7bb0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7bb8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7bc0: 00 00 00 00 00 00 00 00                          - spr_img_22_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7bc8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7bd0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7bd8: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+7be0: 00 00 01 10 00 00 00 00                          -         .byte $00,$00,$01,$10,$00,$00,$00,$00
+7be8: 00 00 01 11 00 00 00 00                          -         .byte $00,$00,$01,$11,$00,$00,$00,$00
+7bf0: 00 00 01 11 10 00 00 00                          -         .byte $00,$00,$01,$11,$10,$00,$00,$00
+7bf8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7c00: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7c08: 00 00 01 11 11 11 00 00                          -         .byte $00,$00,$01,$11,$11,$11,$00,$00
+7c10: 00 00 00 11 11 11 00 00                          -         .byte $00,$00,$00,$11,$11,$11,$00,$00
+7c18: 00 00 11 10 00 01 11 00                          -         .byte $00,$00,$11,$10,$00,$01,$11,$00
+7c20: 00 00 10 00 00 01 10 00                          -         .byte $00,$00,$10,$00,$00,$01,$10,$00
+7c28: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c40: 00 00 00 00 00 00 00 00                          - spr_img_23_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7c48: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c50: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c58: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7c60: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+7c68: 00 00 01 10 00 00 00 00                          -         .byte $00,$00,$01,$10,$00,$00,$00,$00
+7c70: 00 00 01 11 00 00 00 00                          -         .byte $00,$00,$01,$11,$00,$00,$00,$00
+7c78: 00 00 01 11 10 00 00 00                          -         .byte $00,$00,$01,$11,$10,$00,$00,$00
+7c80: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7c88: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7c90: 00 00 01 11 11 11 00 00                          -         .byte $00,$00,$01,$11,$11,$11,$00,$00
+7c98: 00 00 00 11 11 10 00 00                          -         .byte $00,$00,$00,$11,$11,$10,$00,$00
+7ca0: 00 00 00 11 00 10 00 00                          -         .byte $00,$00,$00,$11,$00,$10,$00,$00
+7ca8: 00 00 00 00 00 11 00 00                          -         .byte $00,$00,$00,$00,$00,$11,$00,$00
+7cb0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7cb8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7cc0: 00 00 00 00 00 00 00 00                          - spr_img_24_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7cc8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7cd0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7cd8: 00 00 12 11 21 10 00 00                          -         .byte $00,$00,$12,$11,$21,$10,$00,$00
+7ce0: 00 00 12 11 21 10 00 00                          -         .byte $00,$00,$12,$11,$21,$10,$00,$00
+7ce8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7cf0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7cf8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7d00: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7d08: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7d10: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7d18: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7d20: 00 00 01 00 00 10 00 00                          -         .byte $00,$00,$01,$00,$00,$10,$00,$00
+7d28: 00 00 11 00 00 11 00 00                          -         .byte $00,$00,$11,$00,$00,$11,$00,$00
+7d30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7d38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7d40: 00 00 00 00 00 00 00 00                          - spr_img_25_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7d48: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7d50: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7d58: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7d60: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7d68: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7d70: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7d78: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7d80: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7d88: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7d90: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7d98: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7da0: 00 00 01 00 00 10 00 00                          -         .byte $00,$00,$01,$00,$00,$10,$00,$00
+7da8: 00 00 11 00 00 11 00 00                          -         .byte $00,$00,$11,$00,$00,$11,$00,$00
+7db0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7db8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7dc0: 00 00 00 00 00 00 00 00                          - spr_img_26_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7dc8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7dd0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7dd8: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7de0: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7de8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7df0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7df8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7e00: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7e08: 00 01 11 11 11 11 00 00                          -         .byte $00,$01,$11,$11,$11,$11,$00,$00
+7e10: 00 01 11 11 11 11 00 00                          -         .byte $00,$01,$11,$11,$11,$11,$00,$00
+7e18: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7e20: 00 00 01 10 01 00 00 00                          -         .byte $00,$00,$01,$10,$01,$00,$00,$00
+7e28: 00 00 00 00 11 00 00 00                          -         .byte $00,$00,$00,$00,$11,$00,$00,$00
+7e30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7e38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7e40: 00 00 01 11 11 00 00 00                          - spr_img_27_0:.byte $00,$00,$01,$11,$11,$00,$00,$00
+7e48: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7e50: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7e58: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7e60: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7e68: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7e70: 00 01 11 11 11 00 00 00                          -         .byte $00,$01,$11,$11,$11,$00,$00,$00
+7e78: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+7e80: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7e88: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7e90: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7e98: 00 11 10 00 01 11 00 00                          -         .byte $00,$11,$10,$00,$01,$11,$00,$00
+7ea0: 00 01 10 00 00 01 00 00                          -         .byte $00,$01,$10,$00,$00,$01,$00,$00
+7ea8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7eb0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7eb8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7ec0: 00 00 00 00 00 00 00 00                          - spr_img_28_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7ec8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7ed0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7ed8: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7ee0: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7ee8: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7ef0: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7ef8: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7f00: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+7f08: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7f10: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7f18: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+7f20: 00 00 01 00 11 00 00 00                          -         .byte $00,$00,$01,$00,$11,$00,$00,$00
+7f28: 00 00 11 00 00 00 00 00                          -         .byte $00,$00,$11,$00,$00,$00,$00,$00
+7f30: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7f38: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7f40: 00 00 00 00 00 00 00 00                          - spr_img_29_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7f48: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+7f50: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7f58: 00 00 21 12 11 10 00 00                          -         .byte $00,$00,$21,$12,$11,$10,$00,$00
+7f60: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7f68: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7f70: 00 10 11 11 11 10 11 00                          -         .byte $00,$10,$11,$11,$11,$10,$11,$00
+7f78: 00 11 01 11 11 11 11 00                          -         .byte $00,$11,$01,$11,$11,$11,$11,$00
+7f80: 00 01 11 11 11 11 10 00                          -         .byte $00,$01,$11,$11,$11,$11,$10,$00
+7f88: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+7f90: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+7f98: 00 11 11 11 11 10 00 00                          -         .byte $00,$11,$11,$11,$11,$10,$00,$00
+7fa0: 00 01 10 00 00 11 10 00                          -         .byte $00,$01,$10,$00,$00,$11,$10,$00
+7fa8: 00 00 00 00 00 00 10 00                          -         .byte $00,$00,$00,$00,$00,$00,$10,$00
+7fb0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7fb8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+7fc0: 00 00 00 00 00 00 00 00                          - spr_img_30_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+7fc8: 00 00 00 01 11 11 00 00                          -         .byte $00,$00,$00,$01,$11,$11,$00,$00
+7fd0: 00 00 00 11 11 11 10 00                          -         .byte $00,$00,$00,$11,$11,$11,$10,$00
+7fd8: 00 00 00 21 12 11 10 00                          -         .byte $00,$00,$00,$21,$12,$11,$10,$00
+7fe0: 00 00 00 21 12 11 10 00                          -         .byte $00,$00,$00,$21,$12,$11,$10,$00
+7fe8: 00 00 00 11 11 11 10 00                          -         .byte $00,$00,$00,$11,$11,$11,$10,$00
+7ff0: 00 00 00 11 11 11 10 00                          -         .byte $00,$00,$00,$11,$11,$11,$10,$00
+7ff8: 00 00 11 01 11 11 00 00                          -         .byte $00,$00,$11,$01,$11,$11,$00,$00
+8000: 00 00 11 11 11 11 11 00                          -         .byte $00,$00,$11,$11,$11,$11,$11,$00
+8008: 00 00 01 11 11 11 11 00                          -         .byte $00,$00,$01,$11,$11,$11,$11,$00
+8010: 00 00 00 01 11 11 11 00                          -         .byte $00,$00,$00,$01,$11,$11,$11,$00
+8018: 00 00 00 11 11 11 00 00                          -         .byte $00,$00,$00,$11,$11,$11,$00,$00
+8020: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+8028: 00 00 01 10 01 10 00 00                          -         .byte $00,$00,$01,$10,$01,$10,$00,$00
+8030: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8038: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8040: 00 00 00 00 00 00 00 00                          - spr_img_31_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8048: 00 01 11 11 00 00 00 00                          -         .byte $00,$01,$11,$11,$00,$00,$00,$00
+8050: 00 11 11 11 10 00 00 00                          -         .byte $00,$11,$11,$11,$10,$00,$00,$00
+8058: 00 21 12 11 10 00 00 00                          -         .byte $00,$21,$12,$11,$10,$00,$00,$00
+8060: 00 21 12 11 10 00 00 00                          -         .byte $00,$21,$12,$11,$10,$00,$00,$00
+8068: 00 11 11 11 10 00 00 01                          -         .byte $00,$11,$11,$11,$10,$00,$00,$01
+8070: 00 11 11 11 11 11 11 10                          -         .byte $00,$11,$11,$11,$11,$11,$11,$10
+8078: 00 01 11 11 11 11 00 00                          -         .byte $00,$01,$11,$11,$11,$11,$00,$00
+8080: 00 00 11 11 11 11 00 00                          -         .byte $00,$00,$11,$11,$11,$11,$00,$00
+8088: 00 00 00 11 11 11 11 10                          -         .byte $00,$00,$00,$11,$11,$11,$11,$10
+8090: 00 00 00 00 00 00 00 01                          -         .byte $00,$00,$00,$00,$00,$00,$00,$01
+8098: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80c0: 00 00 00 00 00 00 00 00                          - spr_img_32_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+80c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+80e8: 00 00 11 00 11 00 00 00                          -         .byte $00,$00,$11,$00,$11,$00,$00,$00
+80f0: 00 00 01 11 10 00 00 00                          -         .byte $00,$00,$01,$11,$10,$00,$00,$00
+80f8: 00 01 11 11 11 10 00 00                          -         .byte $00,$01,$11,$11,$11,$10,$00,$00
+8100: 00 00 01 11 10 00 00 00                          -         .byte $00,$00,$01,$11,$10,$00,$00,$00
+8108: 00 00 11 00 11 00 00 00                          -         .byte $00,$00,$11,$00,$11,$00,$00,$00
+8110: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8118: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8120: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8128: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8130: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8138: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8140: 00 00 00 00 00 00 00 00                          - spr_img_33_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8148: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8150: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8158: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8160: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8168: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8170: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8178: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8180: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8188: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8190: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8198: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81a8: 00 01 00 00 00 00 10 00                          -         .byte $00,$01,$00,$00,$00,$00,$10,$00
+81b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81c0: 00 00 00 00 00 00 00 00                          - spr_img_34_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+81c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+81f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8200: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8208: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8210: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8218: 01 00 00 00 00 00 00 10                          -         .byte $01,$00,$00,$00,$00,$00,$00,$10
+8220: 00 01 00 00 00 00 10 00                          -         .byte $00,$01,$00,$00,$00,$00,$10,$00
+8228: 01 01 00 00 00 00 10 10                          -         .byte $01,$01,$00,$00,$00,$00,$10,$10
+8230: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8238: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8240: 00 00 00 00 00 00 00 00                          - spr_img_35_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8248: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8250: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8258: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8260: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8268: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8270: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8278: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8280: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8288: 01 00 00 00 00 00 00 10                          -         .byte $01,$00,$00,$00,$00,$00,$00,$10
+8290: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8298: 00 10 00 00 00 00 01 00                          -         .byte $00,$10,$00,$00,$00,$00,$01,$00
+82a0: 10 01 00 00 00 00 10 01                          -         .byte $10,$01,$00,$00,$00,$00,$10,$01
+82a8: 00 00 10 00 00 01 00 00                          -         .byte $00,$00,$10,$00,$00,$01,$00,$00
+82b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82c0: 00 00 00 00 00 00 00 00                          - spr_img_36_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+82c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+82f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8300: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8308: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8310: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+8318: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8320: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8328: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8330: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8338: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8340: 00 00 00 00 00 00 00 00                          - spr_img_37_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8348: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8350: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8358: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8360: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8368: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8370: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8378: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8380: 00 00 01 01 00 00 00 00                          -         .byte $00,$00,$01,$01,$00,$00,$00,$00
+8388: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8390: 00 00 01 10 00 00 00 00                          -         .byte $00,$00,$01,$10,$00,$00,$00,$00
+8398: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83c0: 00 00 00 00 00 00 00 00                          - spr_img_38_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+83c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+83e8: 00 00 00 10 00 00 00 00                          -         .byte $00,$00,$00,$10,$00,$00,$00,$00
+83f0: 00 00 00 00 01 00 00 00                          -         .byte $00,$00,$00,$00,$01,$00,$00,$00
+83f8: 00 00 00 01 00 00 00 00                          -         .byte $00,$00,$00,$01,$00,$00,$00,$00
+8400: 00 00 00 10 00 00 00 00                          -         .byte $00,$00,$00,$10,$00,$00,$00,$00
+8408: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+8410: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8418: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8420: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8428: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8430: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8438: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8440: 00 00 00 00 00 00 00 00                          - spr_img_39_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8448: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8450: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8458: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8460: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8468: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8470: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+8478: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8480: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8488: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8490: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8498: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+84a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84c0: 00 00 00 00 00 00 00 00                          - spr_img_40_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+84c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+84e8: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+84f0: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+84f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8500: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8508: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8510: 00 00 01 00 00 00 00 00                          -         .byte $00,$00,$01,$00,$00,$00,$00,$00
+8518: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+8520: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8528: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8530: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8538: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8540: 00 00 00 00 00 00 00 00                          - spr_img_41_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8548: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8550: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8558: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8560: 00 00 00 10 00 00 00 00                          -         .byte $00,$00,$00,$10,$00,$00,$00,$00
+8568: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8570: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+8578: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8580: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8588: 00 00 00 10 00 00 00 00                          -         .byte $00,$00,$00,$10,$00,$00,$00,$00
+8590: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8598: 00 00 10 00 00 00 00 00                          -         .byte $00,$00,$10,$00,$00,$00,$00,$00
+85a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85c0: 00 00 00 00 00 00 00 00                          - spr_img_42_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+85c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85e0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85f0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+85f8: 00 00 00 01 00 00 00 00                          -         .byte $00,$00,$00,$01,$00,$00,$00,$00
+8600: 00 00 00 10 10 00 00 00                          -         .byte $00,$00,$00,$10,$10,$00,$00,$00
+8608: 00 00 00 01 00 00 00 00                          -         .byte $00,$00,$00,$01,$00,$00,$00,$00
+8610: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8618: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8620: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8628: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8630: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8638: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8640: 00 00 00 00 00 00 00 00                          - spr_img_43_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8648: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8650: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8658: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8660: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8668: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8670: 00 00 10 00 00 10 00 00                          -         .byte $00,$00,$10,$00,$00,$10,$00,$00
+8678: 00 00 01 00 01 00 00 00                          -         .byte $00,$00,$01,$00,$01,$00,$00,$00
+8680: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8688: 00 00 01 00 01 00 00 00                          -         .byte $00,$00,$01,$00,$01,$00,$00,$00
+8690: 00 00 10 00 00 10 00 00                          -         .byte $00,$00,$10,$00,$00,$10,$00,$00
+8698: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86a0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86a8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86c0: 00 00 00 00 00 00 00 00                          - spr_img_44_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+86c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86d8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86e0: 00 00 10 00 00 10 00 00                          -         .byte $00,$00,$10,$00,$00,$10,$00,$00
+86e8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+86f0: 00 10 10 00 00 10 10 00                          -         .byte $00,$10,$10,$00,$00,$10,$10,$00
+86f8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8700: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8708: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8710: 00 10 10 00 00 10 10 00                          -         .byte $00,$10,$10,$00,$00,$10,$10,$00
+8718: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8720: 00 00 10 00 00 10 00 00                          -         .byte $00,$00,$10,$00,$00,$10,$00,$00
+8728: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8730: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8738: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8740: 00 00 00 00 00 00 00 00                          - spr_img_45_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8748: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8750: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8758: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8760: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+8768: 00 00 00 00 01 10 00 00                          -         .byte $00,$00,$00,$00,$01,$10,$00,$00
+8770: 00 00 00 00 11 10 00 00                          -         .byte $00,$00,$00,$00,$11,$10,$00,$00
+8778: 00 00 00 01 11 10 00 00                          -         .byte $00,$00,$00,$01,$11,$10,$00,$00
+8780: 00 00 00 11 11 10 00 00                          -         .byte $00,$00,$00,$11,$11,$10,$00,$00
+8788: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+8790: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+8798: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+87a0: 00 00 01 10 01 00 00 00                          -         .byte $00,$00,$01,$10,$01,$00,$00,$00
+87a8: 00 00 00 00 11 00 00 00                          -         .byte $00,$00,$00,$00,$11,$00,$00,$00
+87b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+87b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+87c0: 00 00 00 00 00 00 00 00                          - spr_img_46_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+87c8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+87d0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+87d8: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+87e0: 00 00 00 00 01 10 00 00                          -         .byte $00,$00,$00,$00,$01,$10,$00,$00
+87e8: 00 00 00 00 11 10 00 00                          -         .byte $00,$00,$00,$00,$11,$10,$00,$00
+87f0: 00 00 00 01 11 10 00 00                          -         .byte $00,$00,$00,$01,$11,$10,$00,$00
+87f8: 00 00 00 11 11 10 00 00                          -         .byte $00,$00,$00,$11,$11,$10,$00,$00
+8800: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+8808: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+8810: 00 00 11 11 11 00 00 00                          -         .byte $00,$00,$11,$11,$11,$00,$00,$00
+8818: 00 11 10 00 01 11 00 00                          -         .byte $00,$11,$10,$00,$01,$11,$00,$00
+8820: 00 01 10 00 00 01 00 00                          -         .byte $00,$01,$10,$00,$00,$01,$00,$00
+8828: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8830: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8838: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8840: 00 00 00 00 00 00 00 00                          - spr_img_47_0:.byte $00,$00,$00,$00,$00,$00,$00,$00
+8848: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8850: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8858: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+8860: 00 00 00 00 00 10 00 00                          -         .byte $00,$00,$00,$00,$00,$10,$00,$00
+8868: 00 00 00 00 01 10 00 00                          -         .byte $00,$00,$00,$00,$01,$10,$00,$00
+8870: 00 00 00 00 11 10 00 00                          -         .byte $00,$00,$00,$00,$11,$10,$00,$00
+8878: 00 00 00 01 11 10 00 00                          -         .byte $00,$00,$00,$01,$11,$10,$00,$00
+8880: 00 00 00 11 11 10 00 00                          -         .byte $00,$00,$00,$11,$11,$10,$00,$00
+8888: 00 00 01 11 11 10 00 00                          -         .byte $00,$00,$01,$11,$11,$10,$00,$00
+8890: 00 00 11 11 11 10 00 00                          -         .byte $00,$00,$11,$11,$11,$10,$00,$00
+8898: 00 00 01 11 11 00 00 00                          -         .byte $00,$00,$01,$11,$11,$00,$00,$00
+88a0: 00 00 01 00 11 00 00 00                          -         .byte $00,$00,$01,$00,$11,$00,$00,$00
+88a8: 00 00 11 00 00 00 00 00                          -         .byte $00,$00,$11,$00,$00,$00,$00,$00
+88b0: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+88b8: 00 00 00 00 00 00 00 00                          -         .byte $00,$00,$00,$00,$00,$00,$00,$00
+88c0: 00 50 a0 f0 40 90 e0 30 80 d0 20 70 c0 10 60 b0  - sprite_data_end,RowOffsetsLo:.fill LOGICAL_NUM_ROWS, <(i * LOGICAL_ROW_SIZE)
+88d0: 00 50 a0 f0 40 90 e0 30 80 d0 20 70 c0 10 60 b0 
+88e0: 00 50 a0 f0 40 90 e0 30 80 d0 20 70 c0 10 60 b0 
+88f0: 00 50                                           
+88f2: 00 00 00 00 01 01 01 02 02 02 03 03 03 04 04 04  - RowOffsetsHi:.fill LOGICAL_NUM_ROWS, >(i * LOGICAL_ROW_SIZE)
+8902: 05 05 05 05 06 06 06 07 07 07 08 08 08 09 09 09 
+8912: 0a 0a 0a 0a 0b 0b 0b 0c 0c 0c 0d 0d 0d 0e 0e 0e 
+8922: 0f 0f                                           
+8924: 00 00     - XCourse:.word $0000
+8926: 00 00 00 00                                      - ScreenPtr:.dword $00000000
+892a: 00 00 00 00                                      - ScreenPrint:.dword $00000000
+892e: 00 00     -         .align 16
+8930: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  - SpritePtr:.word $0,$0,$0,$0,$0,$0,$0,$0
+8940: 00        - thebase:.byte 0

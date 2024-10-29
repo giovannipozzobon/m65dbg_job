@@ -1,0 +1,99 @@
+.label goudown=$23b5 {
+}
+.label spriterigth=$2327 {
+}
+.label spr_img_7_0=$7440
+.label RowOffsetsHi=$88f2
+.label theend=$70c0
+.label spr_img_29_0=$7f40
+.label spr_img_25_0=$7d40
+.label spr_img_44_0=$86c0
+.label spriteleft=$2333 {
+}
+.label spr_img_21_0=$7b40
+.label spr_img_40_0=$84c0
+.label ScreenPtr=$8926
+.label spritefire=$233f {
+}
+.label exit=$25c2 {
+}
+.label SpritePtr=$8930
+.label spr_img_3_0=$7240
+.label spr_img_18_0=$79c0
+.label spr_img_14_0=$77c0
+.label spr_img_37_0=$8340
+.label char1=$6f40
+.label sprite_data_begin=$70c0
+.label spr_img_10_0=$75c0
+.label spr_img_33_0=$8140
+.label char2=$7040
+.label exitloop=$23d0
+.label spriteup=$230f {
+}
+.label thebase=$8940
+.label spr_img_6_0=$73c0
+.label sprite_0=$70c0
+.label spr_img_26_0=$7dc0
+.label spr_img_45_0=$8740
+.label spr_img_41_0=$8540
+.label spr_img_22_0=$7bc0
+.label Chars=$2e40
+.label Screen_end=$2e10
+.label XCourse=$8924
+.label spr_img_2_0=$71c0
+.label spr_img_38_0=$83c0
+.label spr_img_19_0=$7a40
+.label gfxloop1=$2470
+.label spr_img_34_0=$81c0
+.label sprite_data_end=$88c0
+.label spr_img_15_0=$7840
+.label char=$6e40
+.label spr_img_30_0=$7fc0
+.label spr_img_11_0=$7640
+.label display_text1=$260e
+.label RowOffsetsLo=$88c0
+.label ScreenPrint=$892a
+.label spr_img_9_0=$7540
+.label spr_img_5_0=$7340
+.label spr_img_27_0=$7e40
+.label spr_img_23_0=$7c40
+.label spr_img_46_0=$87c0
+.label exitscroollop=$2399
+.label spr_img_42_0=$85c0
+.label endloop1=$247a {
+}
+.label spr_img_1_0=$7140
+.label spr_img_16_0=$78c0
+.label spr_img_39_0=$8440
+.label goup=$239c {
+}
+.label spritedown=$231b {
+}
+.label spr_img_12_0=$76c0
+.label spr_img_35_0=$8240
+.label spr_img_31_0=$8040
+.label endloop=$246b
+.label Screen=$2640
+.label debug_text=$261c
+.label spr_img_8_0=$74c0
+.label spr_img_28_0=$7ec0
+.label scroolloop=$2373
+.label spr_img_24_0=$7cc0
+.label spr_img_47_0=$8840
+.label spr_img_20_0=$7ac0
+.label spr_img_43_0=$8640
+.label gfxloop=$245f
+.label joyloop=$22bb {
+}
+.label start=$2036 {
+}
+.label joystick2=$260d
+.label joystick1=$260c
+.label spr_img_17_0=$7940
+.label spr_img_4_0=$72c0
+.label spr_img_13_0=$7740
+.label spr_img_0_0=$70c0
+.label spr_img_36_0=$82c0
+.label setup=$2012 {
+}
+.label spr_img_32_0=$80c0
