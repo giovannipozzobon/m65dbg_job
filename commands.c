@@ -1350,6 +1350,122 @@ void load_acme_list(char* fname)
   load_acme_map(fname);
 }
 
+
+void load_kickass_map(char* fname)
+{
+  char strMapFile[200];
+  strcpy(strMapFile, fname);
+  char* sdot = strrchr(strMapFile, '.');
+  *sdot = '\0';
+  strcat(strMapFile, ".sym");
+
+  // check if file exists
+  if (access(strMapFile, F_OK) != -1)
+  {
+    printf("Loading \"%s\"...\n", strMapFile);
+
+    // load the map file
+    FILE* f = fopen(strMapFile, "rt");
+
+    while (!feof(f))
+    {
+      char line[1024];
+      char cpy_line[1024];
+      //char sval[256];
+      int addr;
+      char sym[1024];
+      char *token;
+      //if ((strlen(line)>7) && (strstr(line, ".label "))) {
+      if((fgets(line, 1024, f) != NULL) && (starts_with(line, ".label "))) {
+        strcpy(cpy_line,line);
+
+        char* asmname = strstr(line, ".label ") + strlen(".label ");
+
+        token = strtok(asmname, "=");
+
+        strcpy(sym,token);
+
+        char* sval = strstr(cpy_line, "$");
+
+        //printf("%s\n", sval);
+        sscanf(sval, "$%04X", &addr);
+
+        //sscanf(sval, "$%04X", &addr);
+
+        //printf("%s : %04X %s \n", sym, addr, cpy_line);
+
+        type_symmap_entry sme;
+        sme.addr = addr;
+        sme.sval = sval;
+        sme.symbol = sym;
+        add_to_symmap(sme);
+      }
+    }
+    fclose(f);
+  }
+}
+
+
+void load_KickAss_list(char* fname)
+{
+
+  FILE* f = fopen(fname, "rt");
+  char line[1024];
+  char curfile[256] = "";
+  int lineno, memaddr;
+  char val1[256];
+  char val2[256];
+  char val3[256];
+
+  char segment[256]={0}, module[256]={0};
+  lineno = 0;
+  
+  while (fgets(line, sizeof(line), f)!=NULL) {
+      lineno++;
+      // Controlla se la riga contiene un indirizzo (assumiamo che inizi con un indirizzo in esadecimale)
+      //unsigned int address;
+      int pos, pos2, addr;
+      char address[6]={0}, opcode[50]={0}, source[256]={0}, tmp[256]={0};
+      //char *address, *opcode, *module, *source;
+      char *token;
+
+      if (starts_with(line, "****") && strstr(line, "Segment:"))
+      {
+          char* asmname = strstr(line, "Segment:") + strlen("Segment: ");
+          sscanf(asmname, "%s", segment);
+
+          //printf("find the Segment: %s\n", segment);
+      } 
+      else if (starts_with(line, "[") && strstr(line, "]")){
+          char * pos= strstr(line, "]");
+          int len =strstr(line, "]")-line-1;
+          strncpy(module, line+1, len);
+          module[len] = '\0';
+
+          //printf("find the Module: %s\n", module);
+      }
+      else if (strstr(line, "-") != NULL){
+          // first :
+          token = strtok(line, ":");
+          //printf("find the address: %s\n", token);
+          sscanf(token, "%04X", &addr);
+  
+          type_fileloc fl = { 0 };
+          fl.addr = addr;
+          fl.lastaddr = 0;
+          fl.module = NULL;
+          fl.file = fname;
+          fl.lineno = lineno;
+          add_to_list(fl);
+         
+          //printf("Lista: addr %d, module %s, file %s, line %d \n", addr, module, fname, lineno);
+      }
+      
+    } 
+    fclose(f);
+    load_kickass_map(fname);
+  }
+
 #define KNRM  "\x1B[0m"
 #define KRED  "\x1B[31m"
 #define KGRN  "\x1B[32m"
@@ -1410,6 +1526,12 @@ void listSearch(void)
         printf("Loading \"%s\"...\n", dir->d_name);
         load_lbl(dir->d_name);
       }
+      // .klist = KickAss Compiler 
+      if (ext != NULL && strcmp(ext, ".klist") == 0)
+      {
+        printf("Loading \"%s\"...\n", dir->d_name);
+        load_KickAss_list(dir->d_name);
+      }   
       // .lst = BSA Compiler for MEGA65 ROM
       if (ext != NULL && strcmp(ext, ".lst") == 0)
       {
