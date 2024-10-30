@@ -4709,9 +4709,12 @@ void cmdOffs(void)
 {
   char* token = strtok(NULL, " ");
 
-  if (token == NULL)
-    return;
-  sscanf(token, "%d", &dis_offs);
+  if (token == NULL) {
+    dis_offs = 0;
+  }
+  else {
+    sscanf(token, "%d", &dis_offs);
+  }
 
   if (autocls)
     cmdClearScreen();
