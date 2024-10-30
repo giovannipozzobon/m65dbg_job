@@ -1411,11 +1411,7 @@ void load_KickAss_list(char* fname)
 
   FILE* f = fopen(fname, "rt");
   char line[1024];
-  char curfile[256] = "";
-  int lineno, memaddr;
-  char val1[256];
-  char val2[256];
-  char val3[256];
+  int lineno;
 
   char segment[256]={0}, module[256]={0};
   lineno = 0;
@@ -1424,9 +1420,7 @@ void load_KickAss_list(char* fname)
       lineno++;
       // Controlla se la riga contiene un indirizzo (assumiamo che inizi con un indirizzo in esadecimale)
       //unsigned int address;
-      int pos, pos2, addr;
-      char address[6]={0}, opcode[50]={0}, source[256]={0}, tmp[256]={0};
-      //char *address, *opcode, *module, *source;
+      int addr;
       char *token;
 
       if (starts_with(line, "****") && strstr(line, "Segment:"))
@@ -1437,7 +1431,6 @@ void load_KickAss_list(char* fname)
           //printf("find the Segment: %s\n", segment);
       } 
       else if (starts_with(line, "[") && strstr(line, "]")){
-          char * pos= strstr(line, "]");
           int len =strstr(line, "]")-line-1;
           strncpy(module, line+1, len);
           module[len] = '\0';
@@ -4893,6 +4886,15 @@ int doOneShotAssembly(char* strCommand)
   }
 
    serialFlush();
+
+  if (autocls)
+    cmdClearScreen();
+
+  if (autowatch) {
+    cmdWatches();
+    reg_data reg = get_regs();
+    show_regs(&reg);
+  }
 
    return numbytes;
 }
