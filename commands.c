@@ -139,6 +139,10 @@ type_command_details command_details[] =
   { "symbol", cmdSymbolValue, "<symbol>", "retrieves the value of the symbol from the .map file" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
+  { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
+  { "pokew", cmdPokeW, "<addr16> <word/s>", "pokes word value/s into <addr16> (and beyond, if multiple values)" },
+  { "poked", cmdPokeD, "<addr16> <dword/s>", "pokes dword value/s into <addr16> (and beyond, if multiple values)" },
+  { "pokeq", cmdPokeQ, "<addr16> <qword/s>", "pokes qword value/s into <addr16> (and beyond, if multiple values)" },
   { "mpoke", cmdMPoke, "<addr28> <byte/s>", "pokes byte value/s into <addr28> (and beyond, if multiple values)" },
   { "mpokew", cmdMPokeW, "<addr28> <word/s>", "pokes word value/s into <addr28> (and beyond, if multiple values)" },
   { "mpoked", cmdMPokeD, "<addr28> <dword/s>", "pokes dword value/s into <addr28> (and beyond, if multiple values)" },
@@ -161,7 +165,7 @@ type_command_details command_details[] =
   { "locals", cmdLocals, NULL, "Print out the values of any local variables within the current c-function (needs gurce's cc65 .list file)" },
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
-  { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
+  { "seam", cmdSeam, "[row][col]", "display attributes of selected SEAM character" },
   { "blist", cmdBasicList, NULL, "list the current basic program" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index\n"
 "                 (based on currently selected vicii bank at $dd00)\n"
@@ -2262,7 +2266,7 @@ void cmdChar(void)
 }
 
 
-void cmd_poke(int size)
+void cmd_poke(int size, bool is_addr28)
 {
   char* strAddr = strtok(NULL, " ");
 
@@ -2274,18 +2278,21 @@ void cmd_poke(int size)
 
   int addr28 = get_sym_value(strAddr);
 
+  if (!is_addr28)
+    addr28 += 0x7770000;
+
   sprintf(outbuf, "s%08X", addr28);
 
   char str[10] = "";
   char * strVal;
-  unsigned int val;
+  unsigned long val;
   while ( (strVal = strtok(NULL, " ")) != NULL)
   {
-    sscanf(strVal, "%X", &val);
+    sscanf(strVal, "%lX", &val);
 
     for (int k = 0; k < size; k++)
     {
-      sprintf(str, " %X", val & 0xff);
+      sprintf(str, " %lX", val & 0xff);
       strcat(outbuf, str);
       val >>= 8;
     }
@@ -2295,22 +2302,40 @@ void cmd_poke(int size)
   serialRead(inbuf, BUFSIZE);
 }
 
+void cmdPoke(void)
+{
+  cmd_poke(1, false);
+}
+void cmdPokeW(void)
+{
+  cmd_poke(2, false);
+}
+void cmdPokeD(void)
+{
+  cmd_poke(4, false);
+}
+void cmdPokeQ(void)
+{
+  cmd_poke(8, false);
+}
+
+
 void cmdMPoke(void)
 {
-  cmd_poke(1);
+  cmd_poke(1, true);
 }
 
 void cmdMPokeW(void)
 {
-  cmd_poke(2);
+  cmd_poke(2, true);
 }
 void cmdMPokeD(void)
 {
-  cmd_poke(4);
+  cmd_poke(4, true);
 }
 void cmdMPokeQ(void)
 {
-  cmd_poke(8);
+  cmd_poke(8, true);
 }
 
 // write buffer to client ram
