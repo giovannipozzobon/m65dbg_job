@@ -226,6 +226,7 @@ void run_m65dbg_init_file_commands()
 }
 
 const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*";  // adding the '*' onto basic word break chars
+const char *history_file = ".history.txt";
 
 /**
  * main entry point of program
@@ -236,6 +237,7 @@ const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*";  // adding the '*' 
 int main(int argc, char** argv)
 {
   rl_completer_word_break_characters = dbg_word_break_chars;
+  read_history(history_file);
 
   signal(SIGINT, ctrlc_handler);
   rl_initialize();
@@ -301,12 +303,14 @@ int main(int argc, char** argv)
         strcmp(strInput, "quit") == 0 ||
         strcmp(strInput, "x") == 0 ||
         strcmp(strInput, "q") == 0)
+    {
+      write_history(history_file);
       return 0;
+    }
 
     if (strInput && *strInput)
       add_history(strInput);
 
     parse_command();
-
   }
 }
