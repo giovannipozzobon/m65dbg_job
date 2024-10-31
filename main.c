@@ -225,6 +225,8 @@ void run_m65dbg_init_file_commands()
   load_init_file(".m65dbg_init");
 }
 
+const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*";  // adding the '*' onto basic word break chars
+
 /**
  * main entry point of program
  *
@@ -233,6 +235,8 @@ void run_m65dbg_init_file_commands()
  */
 int main(int argc, char** argv)
 {
+  rl_completer_word_break_characters = dbg_word_break_chars;
+
   signal(SIGINT, ctrlc_handler);
   rl_initialize();
 
