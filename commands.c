@@ -4023,11 +4023,15 @@ void add_symbol_if_not_exist(char* name, int addr)
   }
 }
 
-void scan_single_letter_vars(void)
+void scan_single_letter_vars(char *token)
 {
   char name[5];
-  printf("single letter vars:\n");
-  printf("------------------:\n");
+  if (token == NULL)
+  {
+    printf("single letter vars:\n");
+    printf("------------------:\n");
+  }
+
   for (int k = 'a'; k <= 'z'; k++)
   {
     int byte_val = mem_0f700[0xfd00 - 0xf700 + (k-'a')];
@@ -4040,10 +4044,29 @@ void scan_single_letter_vars(void)
 
     double float_val = get_float_at_addr(0xfe00 + (k-'a')*5, true);
 
-    printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k-32, byte_val, k-32, int_val, k-32, float_val, k-32, str_len);
-    char sval[10];
-    sprintf(sval, "%06X", 0x10000 + str_ptr);
-    print_str_maxlen(sval, str_len, 1);
+    if (token == NULL) {
+      printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k-32, byte_val, k-32, int_val, k-32, float_val, k-32, str_len);
+      char sval[10];
+      sprintf(sval, "%06X", 0x10000 + str_ptr);
+      print_str_maxlen(sval, str_len, 1);
+    }
+    else {
+      // todo: logic to compare varname against given token
+      if (token[0] == (k-32) && token[1] == '&')
+        printf("%c& = %d\n", (k-32), byte_val);
+      if (token[0] == (k-32) && token[1] == '%')
+        printf("%c%% = %d\n", (k-32), int_val);
+      if (token[0] == (k-32) && token[1] == '\0')
+        printf("%c = %-10g\n", (k-32), float_val);
+      if (token[0] == (k-32) && token[1] == '$')
+      {
+        printf("%c$ = (len:%d) ", (k-32), int_val);
+        char sval[10];
+        sprintf(sval, "%06X", 0x10000 + str_ptr);
+        print_str_maxlen(sval, str_len, 1);
+      }
+
+    }
 
     sprintf(name, "~%c&", k-32);
     add_symbol_if_not_exist(name, 0xfd00 + (k-'a'));
@@ -4057,11 +4080,14 @@ void scan_single_letter_vars(void)
   printf("\n");
 }
 
-void scan_two_letter_vars(void)
+void scan_two_letter_vars(char *token)
 {
   char name[5];
-  printf("two letter vars:\n");
-  printf("---------------:\n");
+  if (token == NULL)
+  {
+    printf("two letter vars:\n");
+    printf("---------------:\n");
+  }
 
   int addr = 0x0f700;
   int maxaddr = 0x0fd00;
@@ -4089,7 +4115,8 @@ void scan_two_letter_vars(void)
 
       int int_val  = (mem_0f700[cnt + 3] << 8) +
                      mem_0f700[cnt + 4];
-      printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '%'))
+        printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
     }
 
     if (vartype == '"') {
@@ -4097,7 +4124,8 @@ void scan_two_letter_vars(void)
       add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
 
       double float_val = get_float_from_int_array(&mem_0f700[cnt + 3]);
-      printf("%c%c = %g\n", varnam1, varnam2, float_val);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '\0'))
+        printf("%c%c = %g\n", varnam1, varnam2, float_val);
     }
 
     if (vartype == '$') {
@@ -4107,10 +4135,13 @@ void scan_two_letter_vars(void)
       int str_len  = mem_0f700[cnt + 3];
       int str_ptr  = mem_0f700[cnt + 4] +
                      (mem_0f700[cnt + 5] << 8);
-      printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
-      char sval[10];
-      sprintf(sval, "%06X", 0x10000 + str_ptr);
-      print_str_maxlen(sval, str_len, 1);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '$'))
+      {
+        printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
+        char sval[10];
+        sprintf(sval, "%06X", 0x10000 + str_ptr);
+        print_str_maxlen(sval, str_len, 1);
+      }
     }
 
     cnt += 8;
@@ -4152,8 +4183,9 @@ void read_scalar_var_mem(void)
 void print_basic_var(char* token)
 {
   read_scalar_var_mem();
-  scan_single_letter_vars();
-  scan_two_letter_vars();
+  scan_single_letter_vars(token);
+  scan_two_letter_vars(token);
+  // todo: scan for arrays too
 }
 
 void print_dump(type_watch_entry* watch)
@@ -4197,6 +4229,8 @@ void cmdPrintString(void)
 void cmdPrintBasicVar(void)
 {
   char* token = strtok(NULL, " ");
+  if (token)
+    strupper(token);
   print_basic_var(token);
 }
 
