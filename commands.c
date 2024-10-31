@@ -92,7 +92,7 @@ unsigned char softbrkmem[3] = { 0 };
 type_command_details command_details[] =
 {
   { "?", cmdRawHelp, NULL, "Shows help information for raw/native monitor commands" },
-  { "help", cmdHelp, NULL,  "Shows help information for m65dbg commands" },
+  { "help", cmdHelp, "[<cmdname>]",  "Shows help information for m65dbg commands. If optional <cmdname> given, show help for that command only." },
   { "dump", cmdDump, "<addr16> [<count>]", "Dumps memory (CPU context) at given address (with character representation in right-column)" },
   { "mdump", cmdMDump, "<addr28> [<count>]", "Dumps memory (28-bit addresses) at given address (with character representation in right-column)" },
   { "a", cmdAssemble, "<addr28>", "Assembles instructions at the given <addr28> location." },
@@ -2367,23 +2367,35 @@ void cmdRawHelp(void)
 
 void cmdHelp(void)
 {
-  printf("m65dbg commands\n"
-         "===============\n");
+  // get address from parameter?
+  char* cmdname = strtok(NULL, " ");
+  if (cmdname)
+    strlwr(cmdname);
+
+  if (cmdname == NULL) {
+    printf("m65dbg commands\n"
+           "===============\n");
+  }
 
   for (int k = 0; command_details[k].name != NULL; k++)
   {
     type_command_details cd = command_details[k];
 
-    if (cd.params == NULL)
-      printf("%s = %s\n", cd.name, cd.help);
-    else
-      printf("%s %s = %s\n", cd.name, cd.params, cd.help);
+    if (cmdname == NULL || strcmp(cd.name, cmdname) == 0)
+    {
+      if (cd.params == NULL)
+        printf("%s = %s\n", cd.name, cd.help);
+      else
+        printf("%s %s = %s\n", cd.name, cd.params, cd.help);
+    }
   }
 
-  printf(
-   "[ENTER] = repeat last command\n"
-   "q/x/exit = exit the program\n"
-   );
+  if (cmdname == NULL) {
+    printf(
+     "[ENTER] = repeat last command\n"
+     "q/x/exit = exit the program\n"
+     );
+  }
 }
 
 void print_char(int c)
