@@ -78,6 +78,7 @@ char* type_names[] = { "BYTE   ", "WORD   ", "DWORD  ", "QWORD  ", "STRING ", "D
 bool autocls = false; // auto-clearscreen flag
 bool autowatch = false; // auto-watch flag
 bool autolocals = false; // auto-locals flag
+bool romw = false; // rom writable flag
 bool petscii = false; // show chars in dumps based on petscii
 bool fastmode = false; // switch for slow (2,000,000bps) and fast (4,000,000bps) modes
 bool ctrlcflag = false; // a flag to keep track of whether ctrl-c was caught
@@ -118,6 +119,7 @@ type_command_details command_details[] =
   { "pmf", cmdPrintMFloat, "<addr28>", "Prints the BASIC float value at the given 28-bit address" },
   { "cls", cmdClearScreen, NULL, "Clears the screen" },
   { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
+  { "romw", cmdRomW, "0/1", "If set to 1, rom is writable. If set to 0, rom is read-only. If no parameter, it toggles" },
   { "break", cmdSetBreakpoint, "<addr>", "Sets the hardware breakpoint to the desired address" },
   { "sbreak", cmdSetSoftwareBreakpoint, "<addr>", "Sets the software breakpoint to the desired address" },
   { "wb", cmdWatchByte, "<addr>", "Watches the byte-value of the given address" },
@@ -4294,6 +4296,94 @@ void cmdPrintMFloat(void)
 void cmdClearScreen(void)
 {
   printf("%s%s", KCLEAR, KPOS0_0);
+}
+
+void set_rom_writable(bool write_flag)
+{
+  if (write_flag)
+    printf("Making rom writable... ($2,0000 - $3,FFFF)\n");
+  else
+    printf("Making rom read-only... ($2,0000 - $3,FFFF)\n");
+
+  int cpu_stopped = isCpuStopped();
+
+  if (!cpu_stopped)
+  {
+    printf("Stopping CPU first...\n");
+    serialWrite("t1\n");
+    usleep(10000);
+    serialRead(inbuf, BUFSIZE);
+  }
+
+  reg_data reg = get_regs();
+  int tmppc = 0xf0;
+  mem_data mem = get_mem(tmppc, false);
+  serialFlush();
+
+  usleep(10000);
+
+  oneShotAssembly(&tmppc, "pha");
+  if (write_flag)
+    oneShotAssembly(&tmppc, "lda #$02"); // hyppo_rom_writeenable
+  else
+    oneShotAssembly(&tmppc, "lda #$00"); // hyppo_rom_writeprotect
+  oneShotAssembly(&tmppc, "sta $d641");
+  oneShotAssembly(&tmppc, "pla");
+
+  char strjmpcmd[10];
+  sprintf(strjmpcmd, "jmp $%04x", tmppc);
+  oneShotAssembly(&tmppc, strjmpcmd);
+
+  serialFlush();
+  usleep(10000);
+
+    // reset pc
+    serialWrite("gf0\n");
+    serialRead(inbuf, BUFSIZE);
+
+    usleep(100000);
+
+    // un-pause cpu to execute 
+    serialWrite("t0\n");
+
+    usleep(100000);
+
+    // pause cpu once more
+    serialWrite("t1\n");
+
+    // reset pc
+    char str[64];
+    sprintf(str, "g%X\n", reg.pc);
+    serialWrite(str);
+    serialRead(inbuf, BUFSIZE);
+
+    // reset byte-values at this point
+    for (int k = 0; k < 16; k++)
+    {
+      sprintf(str, "s777%04X %02X\n", 0xf0+k, mem.b[k]);
+      serialWrite(str);
+      usleep(10000);
+      serialRead(inbuf, BUFSIZE);
+    }
+    serialFlush();
+}
+
+
+void cmdRomW(void)
+{
+  char* token = strtok(NULL, " ");
+
+  // if no parameter, then just toggle it
+  if (token == NULL)
+    romw = !romw;
+  else if (strcmp(token, "1") == 0) {
+    romw = true;
+  }
+  else if (strcmp(token, "0") == 0) {
+    romw = false;
+  }
+
+  set_rom_writable(romw);
 }
 
 void cmdAutoClearScreen(void)

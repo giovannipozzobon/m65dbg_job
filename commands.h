@@ -86,6 +86,7 @@ void cmdChar(void);
 void cmdSet(void);
 void cmdGo(void);
 void cmdReload(void);
+void cmdRomW(void);
 int doOneShotAssembly(char* strCommand);
 int  cmdGetCmdCount(void);
 char* cmdGetCmdName(int idx);
