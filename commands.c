@@ -3699,13 +3699,13 @@ void cmdFinish(void)
 // the hex-value of the string
 int get_sym_value(char* token)
 {
-  bool deref_flag = false;
+  int deref_cnt = 0;
   int addr = 0;
 
   // check if we're de-referencing a 16-bit pointer
-  if (token[0] == '*')
+  while (token[0] == '*')
   {
-    deref_flag = true;
+    deref_cnt++;
     token++;
   }
 
@@ -3741,10 +3741,11 @@ int get_sym_value(char* token)
     sscanf(token, "%X", &addr);
   }
 
-  if (deref_flag)
+  while (deref_cnt != 0)
   {
     mem_data mem = get_mem(addr, false);
-    return mem.b[0] + (mem.b[1] << 8);
+    addr = mem.b[0] + (mem.b[1] << 8);
+    deref_cnt--;
   }
 
   return addr;
