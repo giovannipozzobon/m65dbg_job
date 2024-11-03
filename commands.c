@@ -3482,6 +3482,12 @@ void do_continue(int do_soft_break)
     }
   }
 
+  if (ctrlcflag)
+  {
+    serialWrite("t1\n");
+    serialRead(inbuf, BUFSIZE);
+  }
+
   continue_mode = false;
   if (autocls)
     cmdClearScreen();
