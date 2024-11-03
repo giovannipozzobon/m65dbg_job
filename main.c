@@ -112,6 +112,9 @@ void ctrlc_handler(int s)
 
   if (cmdGetContinueMode())
   {
+    usleep(20000); // added sleep so that this serial-write doesn't clash
+                   // with do_continue() serial writing and cause a freeze
+                   // (stack gets trashed somehow?)
     // just send an enter command
     serialWrite("t1\n");
     serialRead(inbuf, BUFSIZE);
