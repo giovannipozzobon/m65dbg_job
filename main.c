@@ -109,15 +109,6 @@ void parse_command(void)
 void ctrlc_handler(int s)
 {
   ctrlcflag = true;
-
-  if (cmdGetContinueMode())
-  {
-    // just send an enter command
-    serialWrite("t1\n");
-    serialRead(inbuf, BUFSIZE);
-
-    cmdSetContinueMode(false);
-  }
 }
 
 //static int nf;
@@ -225,6 +216,9 @@ void run_m65dbg_init_file_commands()
   load_init_file(".m65dbg_init");
 }
 
+const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*";  // adding the '*' onto basic word break chars
+const char *history_file = ".history.txt";
+
 /**
  * main entry point of program
  *
@@ -233,6 +227,9 @@ void run_m65dbg_init_file_commands()
  */
 int main(int argc, char** argv)
 {
+  rl_completer_word_break_characters = dbg_word_break_chars;
+  read_history(history_file);
+
   signal(SIGINT, ctrlc_handler);
   rl_initialize();
 
@@ -297,12 +294,14 @@ int main(int argc, char** argv)
         strcmp(strInput, "quit") == 0 ||
         strcmp(strInput, "x") == 0 ||
         strcmp(strInput, "q") == 0)
+    {
+      write_history(history_file);
       return 0;
+    }
 
     if (strInput && *strInput)
       add_history(strInput);
 
     parse_command();
-
   }
 }
