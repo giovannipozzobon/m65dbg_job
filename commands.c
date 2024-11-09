@@ -51,6 +51,8 @@ typedef struct
 rom_chunk rom_chunks[] = {
   { 0x20000, "(C65 DOS chunk 1)" },
   { 0x22000, "(C65 DOS chunk 2)" },
+  { 0x24000, "(C65 BASIC ALT chunk 1)" },
+  { 0x26000, "(C65 BASIC ALT chunk 2)" },
   { 0x28000, "(CHARSET-A)" },
   { 0x2a000, "(C64 BASIC)" },
   { 0x2c000, "(C65 DOS chunk 3 + C65 KERNAL chunk 1 + CHARSET-C)" },
@@ -4767,6 +4769,7 @@ void cmdMapping(void)
   int reg_d030 = peek(0xffd3030);
 
   reg_data reg = get_regs();
+  printf("MAPH = %04X  :  MAPL = %04X\n", reg.maph, reg.mapl);
 
   printf("\n");
   printf("$D030 register (highest priority)\n");
