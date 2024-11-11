@@ -1614,6 +1614,12 @@ int peek(unsigned int address)
   return mem.b[0];
 }
 
+int peekw(unsigned int address)
+{
+  mem_data mem = get_mem(address, true);
+  return mem.b[0] + (mem.b[1] << 8);
+}
+
 // read all 16 at once (to hopefully speed things up for saving memory dumps)
 mem_data* get_mem28array(int addr)
 {
@@ -4307,13 +4313,8 @@ void cmdClearScreen(void)
   printf("%s%s", KCLEAR, KPOS0_0);
 }
 
-void set_rom_writable(bool write_flag)
+void stop_cpu_if_running(void)
 {
-  if (write_flag)
-    printf("Making rom writable... ($2,0000 - $3,FFFF)\n");
-  else
-    printf("Making rom read-only... ($2,0000 - $3,FFFF)\n");
-
   int cpu_stopped = isCpuStopped();
 
   if (!cpu_stopped)
@@ -4323,6 +4324,25 @@ void set_rom_writable(bool write_flag)
     usleep(10000);
     serialRead(inbuf, BUFSIZE);
   }
+}
+
+void set_mem(int addr, mem_data mem)
+{
+    char str[64];
+    // reset byte-values at this point
+    for (int k = 0; k < 16; k++)
+    {
+      sprintf(str, "s777%04X %02X\n", addr+k, mem.b[k]);
+      serialWrite(str);
+      usleep(10000);
+      serialRead(inbuf, BUFSIZE);
+    }
+    serialFlush();
+}
+
+void call_temp_routine(char** routine)
+{
+  stop_cpu_if_running();
 
   reg_data reg = get_regs();
   int tmppc = 0xf0;
@@ -4331,13 +4351,11 @@ void set_rom_writable(bool write_flag)
 
   usleep(10000);
 
-  oneShotAssembly(&tmppc, "pha");
-  if (write_flag)
-    oneShotAssembly(&tmppc, "lda #$02"); // hyppo_rom_writeenable
-  else
-    oneShotAssembly(&tmppc, "lda #$00"); // hyppo_rom_writeprotect
-  oneShotAssembly(&tmppc, "sta $d641");
-  oneShotAssembly(&tmppc, "pla");
+  while (*routine != NULL)
+  {
+    oneShotAssembly(&tmppc, *routine);
+    routine++;
+  }
 
   char strjmpcmd[10];
   sprintf(strjmpcmd, "jmp $%04x", tmppc);
@@ -4366,15 +4384,26 @@ void set_rom_writable(bool write_flag)
     serialWrite(str);
     serialRead(inbuf, BUFSIZE);
 
-    // reset byte-values at this point
-    for (int k = 0; k < 16; k++)
-    {
-      sprintf(str, "s777%04X %02X\n", 0xf0+k, mem.b[k]);
-      serialWrite(str);
-      usleep(10000);
-      serialRead(inbuf, BUFSIZE);
-    }
-    serialFlush();
+    set_mem(0xf0, mem);
+}
+
+void set_rom_writable(bool write_flag)
+{
+  if (write_flag)
+    printf("Making rom writable... ($2,0000 - $3,FFFF)\n");
+  else
+    printf("Making rom read-only... ($2,0000 - $3,FFFF)\n");
+
+  stop_cpu_if_running();
+
+  char* writeable_routine[] = { "pha", "lda #$02", "sta $d641", "pla", NULL };
+  char* readonly_routine[]  = { "pha", "lda #$00", "sta $d641", "pla", NULL };
+
+  if (write_flag)
+    call_temp_routine(writeable_routine);
+  else
+    call_temp_routine(readonly_routine);
+
 }
 
 
@@ -4751,9 +4780,11 @@ void cmdAutoLocals(void)
   printf(" - autolocals is turned %s.\n", autolocals ? "on" : "off");
 }
 
-char* get_rom_chunk_name(int addr)
+char* get_rom_chunk_name(int mb, int addr)
 {
   static char* empty = "";
+
+  addr += (mb << 20);
 
   for (int k = 0; rom_chunks[k].addr != 0; k++) {
     if (rom_chunks[k].addr == addr) {
@@ -4768,22 +4799,35 @@ void cmdMapping(void)
   int reg_01 = peek(0x01);
   int reg_d030 = peek(0xffd3030);
 
+  stop_cpu_if_running();
+
+  mem_data orig_mem = get_mem(0x0200, false); // preserve memoryw here mapping info written
+
+  char* getmapping_routine[] = { "pha", "phy", "ldy #$02", "lda #$74", "sta $d640", "ply", "pla", NULL };
+
+  call_temp_routine(getmapping_routine);
+
+  int mb_mapl = peek(0x0204);
+  int mb_maph = peek(0x0205);
+
+  set_mem(0x0200, orig_mem);
+
   reg_data reg = get_regs();
-  printf("MAPH = %04X  :  MAPL = %04X\n", reg.maph, reg.mapl);
+  printf("MAPH = %04X (MB_H = %02X)  :  MAPL = %04X (MB_L = %02X)\n", reg.maph, mb_maph, reg.mapl, mb_mapl);
 
   printf("\n");
   printf("$D030 register (highest priority)\n");
   printf("==============\n");
   if (reg_d030 & 0x08)
-    printf("- $8000 <-- $3,8000 %s\n", get_rom_chunk_name(0x38000));
+    printf("- $8000 <-- $3,8000 %s\n", get_rom_chunk_name(0, 0x38000));
   if (reg_d030 & 0x10)
-    printf("- $A000 <-- $3,A000 %s\n", get_rom_chunk_name(0x3a000));
+    printf("- $A000 <-- $3,A000 %s\n", get_rom_chunk_name(0, 0x3a000));
   if (reg_d030 & 0x20)
-    printf("- $C000 <-- $2,C000 %s\n", get_rom_chunk_name(0x2c000));
+    printf("- $C000 <-- $2,C000 %s\n", get_rom_chunk_name(0, 0x2c000));
   if (reg_d030 & 0x40)
     printf("- Selected C65 charset(?)\n");
   if (reg_d030 & 0x80)
-    printf("- $E000 <-- $3,E000 %s\n", get_rom_chunk_name(0x3e000));
+    printf("- $E000 <-- $3,E000 %s\n", get_rom_chunk_name(0, 0x3e000));
   printf("\n");
 
   printf("\"MAP\" mechanism (lower priority)\n");
@@ -4800,7 +4844,7 @@ void cmdMapping(void)
     if (mapl_blocks & (1<<k)) {
       int offset = mapl_offset + 0x2000 * k;
       printf("- $%04X <-- $%1X,%04X %s\n", 0x2000 * k,
-         offset >> 16, offset & 0xffff, get_rom_chunk_name(offset));
+         offset >> 16, offset & 0xffff, get_rom_chunk_name(mb_mapl, offset));
     }
   }
   printf("\n");
@@ -4811,7 +4855,7 @@ void cmdMapping(void)
     if (maph_blocks & (1<<k)) {
       int offset = maph_offset + 0x8000 + 0x2000 * k;
       printf("- $%04X <-- $%1X,%04X %s\n", 0x8000 + 0x2000 * k,
-          offset >> 16, offset & 0xffff, get_rom_chunk_name(offset));
+          offset >> 16, offset & 0xffff, get_rom_chunk_name(mb_maph, offset));
     }
   }
   printf("\n");
