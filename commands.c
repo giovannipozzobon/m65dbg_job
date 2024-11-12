@@ -80,6 +80,7 @@ char* type_names[] = { "BYTE   ", "WORD   ", "DWORD  ", "QWORD  ", "STRING ", "D
 bool autocls = false; // auto-clearscreen flag
 bool autowatch = false; // auto-watch flag
 bool autolocals = false; // auto-locals flag
+bool romw = false; // rom writable flag
 bool petscii = false; // show chars in dumps based on petscii
 bool fastmode = false; // switch for slow (2,000,000bps) and fast (4,000,000bps) modes
 bool ctrlcflag = false; // a flag to keep track of whether ctrl-c was caught
@@ -94,7 +95,7 @@ unsigned char softbrkmem[3] = { 0 };
 type_command_details command_details[] =
 {
   { "?", cmdRawHelp, NULL, "Shows help information for raw/native monitor commands" },
-  { "help", cmdHelp, NULL,  "Shows help information for m65dbg commands" },
+  { "help", cmdHelp, "[<cmdname>]",  "Shows help information for m65dbg commands. If optional <cmdname> given, show help for that command only." },
   { "dump", cmdDump, "<addr16> [<count>]", "Dumps memory (CPU context) at given address (with character representation in right-column)" },
   { "mdump", cmdMDump, "<addr28> [<count>]", "Dumps memory (28-bit addresses) at given address (with character representation in right-column)" },
   { "a", cmdAssemble, "<addr28>", "Assembles instructions at the given <addr28> location." },
@@ -120,6 +121,7 @@ type_command_details command_details[] =
   { "pmf", cmdPrintMFloat, "<addr28>", "Prints the BASIC float value at the given 28-bit address" },
   { "cls", cmdClearScreen, NULL, "Clears the screen" },
   { "autocls", cmdAutoClearScreen, "0/1", "If set to 1, clears the screen prior to every step/next command" },
+  { "romw", cmdRomW, "0/1", "If set to 1, rom is writable. If set to 0, rom is read-only. If no parameter, it toggles" },
   { "break", cmdSetBreakpoint, "<addr>", "Sets the hardware breakpoint to the desired address" },
   { "sbreak", cmdSetSoftwareBreakpoint, "<addr>", "Sets the software breakpoint to the desired address" },
   { "wb", cmdWatchByte, "<addr>", "Watches the byte-value of the given address" },
@@ -141,6 +143,10 @@ type_command_details command_details[] =
   { "symbol", cmdSymbolValue, "<symbol>", "retrieves the value of the symbol from the .map file" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
+  { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
+  { "pokew", cmdPokeW, "<addr16> <word/s>", "pokes word value/s into <addr16> (and beyond, if multiple values)" },
+  { "poked", cmdPokeD, "<addr16> <dword/s>", "pokes dword value/s into <addr16> (and beyond, if multiple values)" },
+  { "pokeq", cmdPokeQ, "<addr16> <qword/s>", "pokes qword value/s into <addr16> (and beyond, if multiple values)" },
   { "mpoke", cmdMPoke, "<addr28> <byte/s>", "pokes byte value/s into <addr28> (and beyond, if multiple values)" },
   { "mpokew", cmdMPokeW, "<addr28> <word/s>", "pokes word value/s into <addr28> (and beyond, if multiple values)" },
   { "mpoked", cmdMPokeD, "<addr28> <dword/s>", "pokes dword value/s into <addr28> (and beyond, if multiple values)" },
@@ -163,7 +169,7 @@ type_command_details command_details[] =
   { "locals", cmdLocals, NULL, "Print out the values of any local variables within the current c-function (needs gurce's cc65 .list file)" },
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
-  { "seam", cmdSeam, "[x][y]", "display attributes of selected SEAM character" },
+  { "seam", cmdSeam, "[row][col]", "display attributes of selected SEAM character" },
   { "blist", cmdBasicList, NULL, "list the current basic program" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index\n"
 "                 (based on currently selected vicii bank at $dd00)\n"
@@ -1413,11 +1419,7 @@ void load_KickAss_list(char* fname)
 
   FILE* f = fopen(fname, "rt");
   char line[1024];
-  char curfile[256] = "";
-  int lineno, memaddr;
-  char val1[256];
-  char val2[256];
-  char val3[256];
+  int lineno;
 
   char segment[256]={0}, module[256]={0};
   lineno = 0;
@@ -1426,9 +1428,7 @@ void load_KickAss_list(char* fname)
       lineno++;
       // Controlla se la riga contiene un indirizzo (assumiamo che inizi con un indirizzo in esadecimale)
       //unsigned int address;
-      int pos, pos2, addr;
-      char address[6]={0}, opcode[50]={0}, source[256]={0}, tmp[256]={0};
-      //char *address, *opcode, *module, *source;
+      int addr;
       char *token;
 
       if (starts_with(line, "****") && strstr(line, "Segment:"))
@@ -1439,7 +1439,6 @@ void load_KickAss_list(char* fname)
           //printf("find the Segment: %s\n", segment);
       } 
       else if (starts_with(line, "[") && strstr(line, "]")){
-          char * pos= strstr(line, "]");
           int len =strstr(line, "]")-line-1;
           strncpy(module, line+1, len);
           module[len] = '\0';
@@ -2277,7 +2276,7 @@ void cmdChar(void)
 }
 
 
-void cmd_poke(int size)
+void cmd_poke(int size, bool is_addr28)
 {
   char* strAddr = strtok(NULL, " ");
 
@@ -2289,18 +2288,21 @@ void cmd_poke(int size)
 
   int addr28 = get_sym_value(strAddr);
 
+  if (!is_addr28)
+    addr28 += 0x7770000;
+
   sprintf(outbuf, "s%08X", addr28);
 
   char str[10] = "";
   char * strVal;
-  unsigned int val;
+  unsigned long val;
   while ( (strVal = strtok(NULL, " ")) != NULL)
   {
-    sscanf(strVal, "%X", &val);
+    sscanf(strVal, "%lX", &val);
 
     for (int k = 0; k < size; k++)
     {
-      sprintf(str, " %X", val & 0xff);
+      sprintf(str, " %lX", val & 0xff);
       strcat(outbuf, str);
       val >>= 8;
     }
@@ -2310,22 +2312,40 @@ void cmd_poke(int size)
   serialRead(inbuf, BUFSIZE);
 }
 
+void cmdPoke(void)
+{
+  cmd_poke(1, false);
+}
+void cmdPokeW(void)
+{
+  cmd_poke(2, false);
+}
+void cmdPokeD(void)
+{
+  cmd_poke(4, false);
+}
+void cmdPokeQ(void)
+{
+  cmd_poke(8, false);
+}
+
+
 void cmdMPoke(void)
 {
-  cmd_poke(1);
+  cmd_poke(1, true);
 }
 
 void cmdMPokeW(void)
 {
-  cmd_poke(2);
+  cmd_poke(2, true);
 }
 void cmdMPokeD(void)
 {
-  cmd_poke(4);
+  cmd_poke(4, true);
 }
 void cmdMPokeQ(void)
 {
-  cmd_poke(8);
+  cmd_poke(8, true);
 }
 
 // write buffer to client ram
@@ -2408,16 +2428,21 @@ void cmdHelp(void)
   {
     type_command_details cd = command_details[k];
 
-    if (cd.params == NULL)
-      printf("%s = %s\n", cd.name, cd.help);
-    else
-      printf("%s %s = %s\n", cd.name, cd.params, cd.help);
+    if (cmdname == NULL || strcmp(cd.name, cmdname) == 0)
+    {
+      if (cd.params == NULL)
+        printf("%s = %s\n", cd.name, cd.help);
+      else
+        printf("%s %s = %s\n", cd.name, cd.params, cd.help);
+    }
   }
 
-  printf(
-   "[ENTER] = repeat last command\n"
-   "q/x/exit = exit the program\n"
-   );
+  if (cmdname == NULL) {
+    printf(
+     "[ENTER] = repeat last command\n"
+     "q/x/exit = exit the program\n"
+     );
+  }
 }
 
 void print_char(int c)
@@ -3477,6 +3502,12 @@ void do_continue(int do_soft_break)
     }
   }
 
+  if (ctrlcflag)
+  {
+    serialWrite("t1\n");
+    serialRead(inbuf, BUFSIZE);
+  }
+
   continue_mode = false;
   if (autocls)
     cmdClearScreen();
@@ -3694,13 +3725,13 @@ void cmdFinish(void)
 // the hex-value of the string
 int get_sym_value(char* token)
 {
-  bool deref_flag = false;
+  int deref_cnt = 0;
   int addr = 0;
 
   // check if we're de-referencing a 16-bit pointer
-  if (token[0] == '*')
+  while (token[0] == '*')
   {
-    deref_flag = true;
+    deref_cnt++;
     token++;
   }
 
@@ -3736,10 +3767,11 @@ int get_sym_value(char* token)
     sscanf(token, "%X", &addr);
   }
 
-  if (deref_flag)
+  while (deref_cnt != 0)
   {
     mem_data mem = get_mem(addr, false);
-    return mem.b[0] + (mem.b[1] << 8);
+    addr = mem.b[0] + (mem.b[1] << 8);
+    deref_cnt--;
   }
 
   return addr;
@@ -4057,11 +4089,15 @@ void add_symbol_if_not_exist(char* name, int addr)
   }
 }
 
-void scan_single_letter_vars(void)
+void scan_single_letter_vars(char *token)
 {
   char name[5];
-  printf("single letter vars:\n");
-  printf("------------------:\n");
+  if (token == NULL)
+  {
+    printf("single letter vars:\n");
+    printf("------------------:\n");
+  }
+
   for (int k = 'a'; k <= 'z'; k++)
   {
     int byte_val = mem_0f700[0xfd00 - 0xf700 + (k-'a')];
@@ -4074,10 +4110,29 @@ void scan_single_letter_vars(void)
 
     double float_val = get_float_at_addr(0xfe00 + (k-'a')*5, true);
 
-    printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k-32, byte_val, k-32, int_val, k-32, float_val, k-32, str_len);
-    char sval[10];
-    sprintf(sval, "%06X", 0x10000 + str_ptr);
-    print_str_maxlen(sval, str_len, 1);
+    if (token == NULL) {
+      printf("%c& = %d\t%c%% = %d\t%c = %-10g\t%c$ = (len:%d) ", k-32, byte_val, k-32, int_val, k-32, float_val, k-32, str_len);
+      char sval[10];
+      sprintf(sval, "%06X", 0x10000 + str_ptr);
+      print_str_maxlen(sval, str_len, 1);
+    }
+    else {
+      // todo: logic to compare varname against given token
+      if (token[0] == (k-32) && token[1] == '&')
+        printf("%c& = %d\n", (k-32), byte_val);
+      if (token[0] == (k-32) && token[1] == '%')
+        printf("%c%% = %d\n", (k-32), int_val);
+      if (token[0] == (k-32) && token[1] == '\0')
+        printf("%c = %-10g\n", (k-32), float_val);
+      if (token[0] == (k-32) && token[1] == '$')
+      {
+        printf("%c$ = (len:%d) ", (k-32), int_val);
+        char sval[10];
+        sprintf(sval, "%06X", 0x10000 + str_ptr);
+        print_str_maxlen(sval, str_len, 1);
+      }
+
+    }
 
     sprintf(name, "~%c&", k-32);
     add_symbol_if_not_exist(name, 0xfd00 + (k-'a'));
@@ -4091,11 +4146,14 @@ void scan_single_letter_vars(void)
   printf("\n");
 }
 
-void scan_two_letter_vars(void)
+void scan_two_letter_vars(char *token)
 {
   char name[5];
-  printf("two letter vars:\n");
-  printf("---------------:\n");
+  if (token == NULL)
+  {
+    printf("two letter vars:\n");
+    printf("---------------:\n");
+  }
 
   int addr = 0x0f700;
   int maxaddr = 0x0fd00;
@@ -4123,7 +4181,8 @@ void scan_two_letter_vars(void)
 
       int int_val  = (mem_0f700[cnt + 3] << 8) +
                      mem_0f700[cnt + 4];
-      printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '%'))
+        printf("%c%c%% = %d\n", varnam1, varnam2, int_val);
     }
 
     if (vartype == '"') {
@@ -4131,7 +4190,8 @@ void scan_two_letter_vars(void)
       add_symbol_if_not_exist(name, 0xf700 + cnt + 3);
 
       double float_val = get_float_from_int_array(&mem_0f700[cnt + 3]);
-      printf("%c%c = %g\n", varnam1, varnam2, float_val);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '\0'))
+        printf("%c%c = %g\n", varnam1, varnam2, float_val);
     }
 
     if (vartype == '$') {
@@ -4141,10 +4201,13 @@ void scan_two_letter_vars(void)
       int str_len  = mem_0f700[cnt + 3];
       int str_ptr  = mem_0f700[cnt + 4] +
                      (mem_0f700[cnt + 5] << 8);
-      printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
-      char sval[10];
-      sprintf(sval, "%06X", 0x10000 + str_ptr);
-      print_str_maxlen(sval, str_len, 1);
+      if (token == NULL || (token[0] == varnam1 && token[1] == varnam2 && token[2] == '$'))
+      {
+        printf("%c%c$ = (len:%d) ", varnam1, varnam2, str_len);
+        char sval[10];
+        sprintf(sval, "%06X", 0x10000 + str_ptr);
+        print_str_maxlen(sval, str_len, 1);
+      }
     }
 
     cnt += 8;
@@ -4186,8 +4249,9 @@ void read_scalar_var_mem(void)
 void print_basic_var(char* token)
 {
   read_scalar_var_mem();
-  scan_single_letter_vars();
-  scan_two_letter_vars();
+  scan_single_letter_vars(token);
+  scan_two_letter_vars(token);
+  // todo: scan for arrays too
 }
 
 void print_dump(type_watch_entry* watch)
@@ -4231,6 +4295,8 @@ void cmdPrintString(void)
 void cmdPrintBasicVar(void)
 {
   char* token = strtok(NULL, " ");
+  if (token)
+    strupper(token);
   print_basic_var(token);
 }
 
@@ -4870,9 +4936,12 @@ void cmdOffs(void)
 {
   char* token = strtok(NULL, " ");
 
-  if (token == NULL)
-    return;
-  sscanf(token, "%d", &dis_offs);
+  if (token == NULL) {
+    dis_offs = 0;
+  }
+  else {
+    sscanf(token, "%d", &dis_offs);
+  }
 
   if (autocls)
     cmdClearScreen();
@@ -5047,6 +5116,15 @@ int doOneShotAssembly(char* strCommand)
   }
 
    serialFlush();
+
+  if (autocls)
+    cmdClearScreen();
+
+  if (autowatch) {
+    cmdWatches();
+    reg_data reg = get_regs();
+    show_regs(&reg);
+  }
 
    return numbytes;
 }
