@@ -2380,10 +2380,29 @@ void cmdRawHelp(void)
   );
 }
 
+char *strlower(char *str)
+{
+  unsigned char *p = (unsigned char *)str;
+
+  while (*p) {
+     *p = tolower((unsigned char)*p);
+      p++;
+  }
+
+  return str;
+}
+
 void cmdHelp(void)
 {
-  printf("m65dbg commands\n"
-         "===============\n");
+  // get address from parameter?
+  char* cmdname = strtok(NULL, " ");
+  if (cmdname)
+    strlower(cmdname);
+
+  if (cmdname == NULL) {
+    printf("m65dbg commands\n"
+           "===============\n");
+  }
 
   for (int k = 0; command_details[k].name != NULL; k++)
   {
@@ -4323,8 +4342,8 @@ void set_rom_writable(bool write_flag)
 
   stop_cpu_if_running();
 
-  char* writeable_routine[] = { "pha", "lda #$02", "sta $d641", "pla", NULL };
-  char* readonly_routine[]  = { "pha", "lda #$00", "sta $d641", "pla", NULL };
+  char* writeable_routine[] = { "pha", "lda #$02", "sta $d641", "clv", "pla", NULL };
+  char* readonly_routine[]  = { "pha", "lda #$00", "sta $d641", "clv", "pla", NULL };
 
   if (write_flag)
     call_temp_routine(writeable_routine);
@@ -4730,7 +4749,7 @@ void cmdMapping(void)
 
   mem_data orig_mem = get_mem(0x0200, false); // preserve memoryw here mapping info written
 
-  char* getmapping_routine[] = { "pha", "phy", "ldy #$02", "lda #$74", "sta $d640", "ply", "pla", NULL };
+  char* getmapping_routine[] = { "pha", "phy", "ldy #$02", "lda #$74", "sta $d640", "clv", "ply", "pla", NULL };
 
   call_temp_routine(getmapping_routine);
 
