@@ -140,7 +140,7 @@ type_command_details command_details[] =
   { "watches", cmdWatches, NULL, "Lists all watches and their present values" },
   { "wdel", cmdDeleteWatch, "<watch#>/all", "Deletes the watch number specified (use 'watches' command to get a list of existing watch numbers)" },
   { "autowatch", cmdAutoWatch, "0/1", "If set to 1, shows all watches prior to every step/next/dis command" },
-  { "symbol", cmdSymbolValue, "<symbol>", "retrieves the value of the symbol from the .map file" },
+  { "symbol", cmdSymbolValue, "<symbol|$hex>", "retrieves the value of the symbol from the .map file. Alternatively, can find symbol name/s matching given $hex address" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
   { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
@@ -5129,16 +5129,37 @@ int doOneShotAssembly(char* strCommand)
    return numbytes;
 }
 
+void find_addr_in_symmap(int addr)
+{
+  type_symmap_entry* iter = lstSymMap;
+
+  while (iter != NULL)
+  {
+    if (addr == iter->addr) {
+      printf("%s : %s\n", iter->sval, iter->symbol);
+    }
+
+    iter = iter->next;
+  }
+}
+
 void cmdSymbolValue(void)
 {
   char* token = strtok(NULL, " ");
 
   if (token != NULL)
   {
-    type_symmap_entry* sme = find_in_symmap(token);
+    if (token[0] == '$') {
+      int addr;
+      sscanf(token+1, "%X", &addr);
+      find_addr_in_symmap(addr);
+    }
+    else {
+      type_symmap_entry* sme = find_in_symmap(token);
 
-    if (sme != NULL)
-      printf("%s : %s\n", sme->sval, sme->symbol);
+      if (sme != NULL)
+        printf("%s : %s\n", sme->sval, sme->symbol);
+    }
   }
 }
 
