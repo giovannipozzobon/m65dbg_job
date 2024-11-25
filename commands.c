@@ -140,7 +140,7 @@ type_command_details command_details[] =
   { "watches", cmdWatches, NULL, "Lists all watches and their present values" },
   { "wdel", cmdDeleteWatch, "<watch#>/all", "Deletes the watch number specified (use 'watches' command to get a list of existing watch numbers)" },
   { "autowatch", cmdAutoWatch, "0/1", "If set to 1, shows all watches prior to every step/next/dis command" },
-  { "symbol", cmdSymbolValue, "<symbol|$hex>", "retrieves the value of the symbol from the .map file. Alternatively, can find symbol name/s matching given $hex address" },
+  { "symbol", cmdSymbolValue, "<symbol|$hex>", "retrieves the value of the symbol from the .map file. Alternatively, can find symbol name/s matching given $hex address. If two $hex values are given, it finds all symbols within this range" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
   { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
@@ -5129,13 +5129,14 @@ int doOneShotAssembly(char* strCommand)
    return numbytes;
 }
 
-void find_addr_in_symmap(int addr)
+void find_addr_in_symmap(int addr, int eaddr)
 {
   type_symmap_entry* iter = lstSymMap;
 
   while (iter != NULL)
   {
-    if (addr == iter->addr) {
+    if ((eaddr == -1 && addr == iter->addr) ||
+        (addr <= iter->addr && iter->addr <= eaddr)) {
       printf("%s : %s\n", iter->sval, iter->symbol);
     }
 
@@ -5151,8 +5152,15 @@ void cmdSymbolValue(void)
   {
     if (token[0] == '$') {
       int addr;
+      int addr2 = -1;
       sscanf(token+1, "%X", &addr);
-      find_addr_in_symmap(addr);
+
+      char* token = strtok(NULL, " ");
+      if (token[0] == '$') {
+        sscanf(token+1, "%X", &addr2);
+      }
+
+      find_addr_in_symmap(addr, addr2);
     }
     else {
       type_symmap_entry* sme = find_in_symmap(token);
