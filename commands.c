@@ -5156,7 +5156,7 @@ void cmdSymbolValue(void)
       sscanf(token+1, "%X", &addr);
 
       char* token = strtok(NULL, " ");
-      if (token[0] == '$') {
+      if (token != NULL && token[0] == '$') {
         sscanf(token+1, "%X", &addr2);
       }
 
