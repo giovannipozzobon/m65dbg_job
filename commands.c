@@ -382,7 +382,7 @@ type_fileloc* add_to_list(type_fileloc fl)
     {
       type_fileloc* flcpy = malloc(sizeof(type_fileloc));
       flcpy->addr = iter->addr;
-      flcpy->addr = iter->lastaddr;
+      flcpy->lastaddr = iter->lastaddr;
       flcpy->file = iter->file;
       flcpy->lineno = iter->lineno;
       flcpy->module = iter->module;
