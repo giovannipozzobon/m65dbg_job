@@ -4496,7 +4496,10 @@ void clearSoftBreak(void)
     softbrkaddr |= 0xfff0000;
 
   // inject JMP command to loop over itself
-  sprintf(str, "s%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
+  if (softbrkaddr > 0xffff)
+    sprintf(str, "s%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
+  else
+    sprintf(str, "s777%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
   serialWrite(str);
   serialRead(inbuf, BUFSIZE);
   softbrkaddr = 0;
@@ -4531,7 +4534,11 @@ void setSoftBreakpoint(int addr)
   softbrkmem[2] = mem.b[2];
 
   // inject JMP command to loop over itself
-  sprintf(str, "s%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+  if (in_hv)
+    sprintf(str, "s%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+  else
+    sprintf(str, "s777%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+
   serialWrite(str);
   serialRead(inbuf, BUFSIZE);
 
