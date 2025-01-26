@@ -140,7 +140,7 @@ type_command_details command_details[] =
   { "watches", cmdWatches, NULL, "Lists all watches and their present values" },
   { "wdel", cmdDeleteWatch, "<watch#>/all", "Deletes the watch number specified (use 'watches' command to get a list of existing watch numbers)" },
   { "autowatch", cmdAutoWatch, "0/1", "If set to 1, shows all watches prior to every step/next/dis command" },
-  { "symbol", cmdSymbolValue, "<symbol>", "retrieves the value of the symbol from the .map file" },
+  { "symbol", cmdSymbolValue, "<symbol|$hex>", "retrieves the value of the symbol from the .map file. Alternatively, can find symbol name/s matching given $hex address. If two $hex values are given, it finds all symbols within this range" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
   { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
   { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
@@ -180,6 +180,7 @@ type_command_details command_details[] =
   { "set", cmdSet, "<addr> <string|bytes>", "set bytes at the given address to the desired string or bytes" },
   { "reload", cmdReload, NULL, "reloads any list and map files (in-case you've rebuilt them recently)" },
   { "go", cmdGo, "<addr>", "sets the PC to the desired address." },
+  { "palette", cmdPalette, "<startidx> <endidx>", "Shows details of the palette for the given range. If no range given, the first 32 colour indices are selected." },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -382,7 +383,7 @@ type_fileloc* add_to_list(type_fileloc fl)
     {
       type_fileloc* flcpy = malloc(sizeof(type_fileloc));
       flcpy->addr = iter->addr;
-      flcpy->addr = iter->lastaddr;
+      flcpy->lastaddr = iter->lastaddr;
       flcpy->file = iter->file;
       flcpy->lineno = iter->lineno;
       flcpy->module = iter->module;
@@ -903,8 +904,8 @@ void load_map(const char* fname)
 
       int addr;
       char sym[1024];
-      sscanf(line, "$%04X | %s", &addr, sym);
-      sscanf(line, "| %s", sval);
+      sscanf(line, "$%X | %s", &addr, sym);
+      sscanf(line, "%s |", sval);
 
       //printf("%s : %04X\n", sym, addr);
       type_symmap_entry sme;
@@ -1119,10 +1120,8 @@ void load_list(char* fname)
   char line[1024];
   int first_line = 1;
 
-  while (!feof(f))
+  while (fgets(line, 1024, f) != NULL)
   {
-    fgets(line, 1024, f);
-
     if (first_line)
     {
       first_line = 0;
@@ -2150,6 +2149,88 @@ void cmdGo(void)
 
   serialWrite(command_str);
   serialRead(inbuf, BUFSIZE);
+}
+
+void get_primary_colour_values(int address, unsigned char* paldata)
+{
+  mem_data* mem = get_mem28array(address);
+  for (int k = 0; k < 256; k++)
+  {
+    int tmp = mem[k/16].b[k%16];
+    paldata[k] = ((tmp & 0x0f) << 4) + (tmp >> 4);
+  }
+}
+
+unsigned char* get_palette_data()
+{
+  static unsigned char paldata[3*256];
+
+  get_primary_colour_values(0xffd3100, &paldata[0*256]);  // red
+  get_primary_colour_values(0xffd3200, &paldata[1*256]);  // green
+  get_primary_colour_values(0xffd3300, &paldata[2*256]);  // blue
+
+  return paldata;
+}
+
+void set_palette_entry(int idx, int val)
+{
+  int r = (val >> 16) & 0xff;
+  int g = (val >> 8) & 0xff;
+  int b = val & 0xff;
+
+  char str[128];
+  int tmp = ( (r & 0x0f) << 4) + ( (r & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3100 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+
+  tmp = ( (g & 0x0f) << 4) + ( (g & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3200 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+
+  tmp = ( (b & 0x0f) << 4) + ( (b & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3300 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+}
+
+void cmdPalette(void)
+{
+  int startidx = 0;
+  int endidx = 31;
+
+  char* strAddr = strtok(NULL, " ");
+  if (strAddr != NULL) {
+    startidx = get_sym_value(strAddr);
+    endidx = startidx;
+
+    strAddr = strtok(NULL, " ");
+    if (strAddr != NULL) {
+      if (strcmp(strAddr, "=") == 0) {
+        strAddr = strtok(NULL, " ");
+        if (strAddr == NULL) {
+          printf("ERROR: Expected hex-value to set palette entry to\n");
+          return;
+        }
+        int val = get_sym_value(strAddr);
+        set_palette_entry(startidx, val);
+      }
+      else {
+        endidx = get_sym_value(strAddr);
+      }
+    }
+  }
+
+  unsigned char *palette_mem = get_palette_data();
+
+  for (int k = startidx; k <= endidx; k++)
+  {
+    unsigned int r = palette_mem[0*256 + k];
+    unsigned int g = palette_mem[1*256 + k];
+    unsigned int b = palette_mem[2*256 + k];
+    printf("idx# 0x%02X: " KINV "\x1b[38;2;%u;%u;%um " KNRM " %02X%02X%02X (%u, %u, %u)\n", k, r, g, b, r, g, b, r, g, b);
+  }
 }
 
 
@@ -3577,7 +3658,7 @@ void cmdHardNext(void)
     type_fileloc *found = find_in_list(reg.pc);
     cur_file_loc = found;
 
-    if (found->lastaddr != 0 && (found->addr <= reg.pc && reg.pc <= found->lastaddr))
+    if (found != NULL && found->lastaddr != 0 && (found->addr <= reg.pc && reg.pc <= found->lastaddr))
     {
       do
       {
@@ -4496,7 +4577,10 @@ void clearSoftBreak(void)
     softbrkaddr |= 0xfff0000;
 
   // inject JMP command to loop over itself
-  sprintf(str, "s%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
+  if (softbrkaddr > 0xffff)
+    sprintf(str, "s%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
+  else
+    sprintf(str, "s777%04X %02X %02X %02X\n", softbrkaddr, softbrkmem[0], softbrkmem[1], softbrkmem[2]);
   serialWrite(str);
   serialRead(inbuf, BUFSIZE);
   softbrkaddr = 0;
@@ -4531,7 +4615,11 @@ void setSoftBreakpoint(int addr)
   softbrkmem[2] = mem.b[2];
 
   // inject JMP command to loop over itself
-  sprintf(str, "s%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+  if (in_hv)
+    sprintf(str, "s%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+  else
+    sprintf(str, "s777%04X %02X %02X %02X\n", addr, 0x4C, addr & 0xff, (addr >> 8) & 0xff);
+
   serialWrite(str);
   serialRead(inbuf, BUFSIZE);
 
@@ -5129,16 +5217,45 @@ int doOneShotAssembly(char* strCommand)
    return numbytes;
 }
 
+void find_addr_in_symmap(int addr, int eaddr)
+{
+  type_symmap_entry* iter = lstSymMap;
+
+  while (iter != NULL)
+  {
+    if ((eaddr == -1 && addr == iter->addr) ||
+        (addr <= iter->addr && iter->addr <= eaddr)) {
+      printf("%s : %s\n", iter->sval, iter->symbol);
+    }
+
+    iter = iter->next;
+  }
+}
+
 void cmdSymbolValue(void)
 {
   char* token = strtok(NULL, " ");
 
   if (token != NULL)
   {
-    type_symmap_entry* sme = find_in_symmap(token);
+    if (token[0] == '$') {
+      int addr;
+      int addr2 = -1;
+      sscanf(token+1, "%X", &addr);
 
-    if (sme != NULL)
-      printf("%s : %s\n", sme->sval, sme->symbol);
+      char* token = strtok(NULL, " ");
+      if (token != NULL && token[0] == '$') {
+        sscanf(token+1, "%X", &addr2);
+      }
+
+      find_addr_in_symmap(addr, addr2);
+    }
+    else {
+      type_symmap_entry* sme = find_in_symmap(token);
+
+      if (sme != NULL)
+        printf("%s : %s\n", sme->sval, sme->symbol);
+    }
   }
 }
 
