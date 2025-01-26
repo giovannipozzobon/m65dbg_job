@@ -85,6 +85,7 @@ void cmdSprite(void);
 void cmdChar(void);
 void cmdSet(void);
 void cmdGo(void);
+void cmdPalette(void);
 void cmdReload(void);
 void cmdRomW(void);
 int doOneShotAssembly(char* strCommand);

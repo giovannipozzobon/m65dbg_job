@@ -180,6 +180,7 @@ type_command_details command_details[] =
   { "set", cmdSet, "<addr> <string|bytes>", "set bytes at the given address to the desired string or bytes" },
   { "reload", cmdReload, NULL, "reloads any list and map files (in-case you've rebuilt them recently)" },
   { "go", cmdGo, "<addr>", "sets the PC to the desired address." },
+  { "palette", cmdPalette, "<startidx> <endidx>", "Shows details of the palette for the given range. If no range given, the first 32 colour indices are selected." },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -2150,6 +2151,54 @@ void cmdGo(void)
 
   serialWrite(command_str);
   serialRead(inbuf, BUFSIZE);
+}
+
+void get_primary_colour_values(int address, unsigned char* paldata)
+{
+  mem_data* mem = get_mem28array(address);
+  for (int k = 0; k < 256; k++)
+  {
+    int tmp = mem[k/16].b[k%16];
+    paldata[k] = ((tmp & 0x0f) << 4) + (tmp >> 4);
+  }
+}
+
+unsigned char* get_palette_data()
+{
+  static unsigned char paldata[3*256];
+
+  get_primary_colour_values(0xffd3100, &paldata[0*256]);  // red
+  get_primary_colour_values(0xffd3200, &paldata[1*256]);  // green
+  get_primary_colour_values(0xffd3100, &paldata[2*256]);  // blue
+
+  return paldata;
+}
+
+void cmdPalette(void)
+{
+  int startidx = 0;
+  int endidx = 31;
+
+  char* strAddr = strtok(NULL, " ");
+  if (strAddr != NULL) {
+    startidx = get_sym_value(strAddr);
+    endidx = startidx;
+
+    strAddr = strtok(NULL, " ");
+    if (strAddr != NULL) {
+      endidx = get_sym_value(strAddr);
+    }
+  }
+
+  unsigned char *palette_mem = get_palette_data();
+
+  for (int k = startidx; k <= endidx; k++)
+  {
+    unsigned int r = palette_mem[0*256 + k];
+    unsigned int g = palette_mem[1*256 + k];
+    unsigned int b = palette_mem[2*256 + k];
+    printf("idx# 0x%02X: " KINV "\x1b[38;2;%u;%u;%um " KNRM " %02X%02X%02X (%u, %u, %u)\n", k, r, g, b, r, g, b, r, g, b);
+  }
 }
 
 
