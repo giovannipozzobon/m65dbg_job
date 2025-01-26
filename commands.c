@@ -2167,9 +2167,32 @@ unsigned char* get_palette_data()
 
   get_primary_colour_values(0xffd3100, &paldata[0*256]);  // red
   get_primary_colour_values(0xffd3200, &paldata[1*256]);  // green
-  get_primary_colour_values(0xffd3100, &paldata[2*256]);  // blue
+  get_primary_colour_values(0xffd3300, &paldata[2*256]);  // blue
 
   return paldata;
+}
+
+void set_palette_entry(int idx, int val)
+{
+  int r = (val >> 16) & 0xff;
+  int g = (val >> 8) & 0xff;
+  int b = val & 0xff;
+
+  char str[128];
+  int tmp = ( (r & 0x0f) << 4) + ( (r & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3100 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+
+  tmp = ( (g & 0x0f) << 4) + ( (g & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3200 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+
+  tmp = ( (b & 0x0f) << 4) + ( (b & 0xf0) >> 4);
+  sprintf(str, "s%X %x\n", 0xffd3300 + idx, tmp);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
 }
 
 void cmdPalette(void)
@@ -2184,7 +2207,18 @@ void cmdPalette(void)
 
     strAddr = strtok(NULL, " ");
     if (strAddr != NULL) {
-      endidx = get_sym_value(strAddr);
+      if (strcmp(strAddr, "=") == 0) {
+        strAddr = strtok(NULL, " ");
+        if (strAddr == NULL) {
+          printf("ERROR: Expected hex-value to set palette entry to\n");
+          return;
+        }
+        int val = get_sym_value(strAddr);
+        set_palette_entry(startidx, val);
+      }
+      else {
+        endidx = get_sym_value(strAddr);
+      }
     }
   }
 
