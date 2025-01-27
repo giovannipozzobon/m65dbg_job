@@ -1714,6 +1714,43 @@ int parse_indices(char* str, int* x, int* y)
   return 0;
 }
 
+#define GOTOX_CLEAR 0
+#define GOTOX_SET 1
+#define GOTOX_EITHER 2
+#define V3_EXT_ATTR 1
+#define V2_MCM 2
+#define SCR0 0
+#define SCR1 1
+#define CLR0 2
+#define CLR1 3
+
+
+BitfieldInfo bitfields[] = {
+  { "char_number",      GOTOX_CLEAR,  SCR0, 0, 8, SCR1, 0, 5 },
+  { "rhs_trim_lo",      GOTOX_CLEAR,  SCR1, 5, 3, CLR0, 2, 1 },
+  { "topbot_trim",      GOTOX_CLEAR,  CLR0, 0, 2, -1, -1, -1 },
+  { "ncm_flag",         GOTOX_CLEAR,  CLR0, 3, 1, -1, -1, -1 },
+  { "gotox_flag",       GOTOX_EITHER, CLR0, 4, 1, -1, -1, -1 },
+  { "alpha_mode",       GOTOX_CLEAR,  CLR0, 5, 1, -1, -1, -1 },
+  { "horz_flip",        GOTOX_CLEAR,  CLR0, 6, 1, -1, -1, -1 },
+  { "vert_flip",        GOTOX_CLEAR,  CLR0, 7, 1, -1, -1, -1 },
+  { "clr_4bit",         GOTOX_CLEAR,  CLR1, 0, 4, -1, -1, -1 },
+  { "blink",            GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 4, 1, -1, -1, -1 },
+  { "reverse",          GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 5, 1, -1, -1, -1 },
+  { "bold",             GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 6, 1, -1, -1, -1 },
+  { "underline",        GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 7, 1, -1, -1, -1 },
+  { "clr_8bit",         GOTOX_CLEAR | V2_MCM, CLR1, 0, 8, -1, -1, -1 },
+  { "goto_x",        GOTOX_SET,    SCR0, 0, 8, SCR1, 0, 2 },
+  { "fcm_yoffs_dir",    GOTOX_SET,    SCR1, 4, 1, -1, -1, -1 }, // substract yoffs instead of add
+  { "fcm_yoffs",        GOTOX_SET,    SCR1, 5, 3, -1, -1, -1 },
+  { "foreground_flag",  GOTOX_SET,    CLR0, 2, 1, -1, -1, -1 },
+  { "rowmask_flag",     GOTOX_SET,    CLR0, 3, 1, -1, -1, -1 },
+  { "background_flag",  GOTOX_SET,    CLR0, 6, 1, -1, -1, -1 },
+  { "transparent_flag", GOTOX_SET,    CLR0, 7, 1, -1, -1, -1 },
+  { "rowmask",          GOTOX_SET,    CLR1, 0, 8, -1, -1, -1 },
+  { NULL,               -1,           -1, -1, -1, -1, -1, -1 }
+};
+
 void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int x, int y)
 {
   printf("seam[%d][%d]:\n", y, x);
@@ -1722,12 +1759,12 @@ void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, 
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
   int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
 
-  mem_data* multimem = get_mem28array(scr_addr);
-  int scr0 = multimem->b[0];
-  int scr1 = multimem->b[1];
-  multimem = get_mem28array(clr_addr);
-  int clr0 = multimem->b[0];
-  int clr1 = multimem->b[1];
+  mem_data mem = get_mem(scr_addr, true);
+  int scr0 = mem.b[0];
+  int scr1 = mem.b[1];
+  mem = get_mem(clr_addr, true);
+  int clr0 = mem.b[0];
+  int clr1 = mem.b[1];
   printf("  $%08X : scr0 = $%02X : %%%s\n", scr_addr+0, scr0, toBinaryString(scr0));
   printf("  $%08X : scr1 = $%02X : %%%s\n", scr_addr+1, scr1, toBinaryString(scr1));
   printf("  $%08X : clr0 = $%02X : %%%s\n", clr_addr+0, clr0, toBinaryString(clr0));
@@ -2231,6 +2268,24 @@ void cmdPalette(void)
     unsigned int b = palette_mem[2*256 + k];
     printf("idx# 0x%02X: " KINV "\x1b[38;2;%u;%u;%um " KNRM " %02X%02X%02X (%u, %u, %u)\n", k, r, g, b, r, g, b, r, g, b);
   }
+}
+
+unsigned char* get_palette(void)
+{
+  static unsigned char paldata[256];
+
+  unsigned char *palette_mem = get_palette_data();
+
+  for (int k = 0; k <= 255; k++)
+  {
+    unsigned int r = palette_mem[0*256 + k];
+    unsigned int g = palette_mem[1*256 + k];
+    unsigned int b = palette_mem[2*256 + k];
+
+    paldata[k] = (r << 16) + (g << 8) + b;
+  }
+
+  return paldata;
 }
 
 

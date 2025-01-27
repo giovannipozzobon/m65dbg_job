@@ -99,6 +99,20 @@ extern char outbuf[];
 extern char inbuf[];
 extern bool ctrlcflag;
 
+// Define a struct to hold bitfield details
+typedef struct {
+    const char* name;             // Name of the bitfield
+    int gotox_flag;               // Whether GOTOX needs to be cleared or set for this bitfield
+    uint8_t byte_index1;           // First byte index
+    uint8_t start_bit1;            // Start bit in the first byte
+    uint8_t num_bits1;             // Number of bits in the first byte
+    uint8_t byte_index2;           // Second byte index (if applicable)
+    uint8_t start_bit2;            // Start bit in the second byte
+    uint8_t num_bits2;             // Number of bits in the second byte
+} BitfieldInfo;
+
+
+
 typedef struct
 {
   char* name;
