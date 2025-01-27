@@ -1714,6 +1714,43 @@ int parse_indices(char* str, int* x, int* y)
   return 0;
 }
 
+#define GOTOX_CLEAR 0
+#define GOTOX_SET 1
+#define GOTOX_EITHER 2
+#define V3_EXT_ATTR 1
+#define V2_MCM 2
+#define SCR0 0
+#define SCR1 1
+#define CLR0 2
+#define CLR1 3
+
+
+BitfieldInfo bitfields[] = {
+  { "char_number",      GOTOX_CLEAR,  SCR0, 0, 8, SCR1, 0, 5 },
+  { "rhs_trim",         GOTOX_CLEAR,  SCR1, 5, 3, CLR0, 2, 1 },
+  { "topbot_trim",      GOTOX_CLEAR,  CLR0, 0, 2, -1, -1, -1 },
+  { "ncm_flag",         GOTOX_CLEAR,  CLR0, 3, 1, -1, -1, -1 },
+  { "gotox_flag",       GOTOX_EITHER, CLR0, 4, 1, -1, -1, -1 },
+  { "alpha_mode",       GOTOX_CLEAR,  CLR0, 5, 1, -1, -1, -1 },
+  { "horz_flip",        GOTOX_CLEAR,  CLR0, 6, 1, -1, -1, -1 },
+  { "vert_flip",        GOTOX_CLEAR,  CLR0, 7, 1, -1, -1, -1 },
+  { "clr_4bit",         GOTOX_CLEAR,  CLR1, 0, 4, -1, -1, -1 },
+  { "blink",            GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 4, 1, -1, -1, -1 },
+  { "reverse",          GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 5, 1, -1, -1, -1 },
+  { "bold",             GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 6, 1, -1, -1, -1 },
+  { "underline",        GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 7, 1, -1, -1, -1 },
+  { "clr_8bit",         GOTOX_CLEAR | V2_MCM, CLR1, 0, 8, -1, -1, -1 },
+  { "goto_x",        GOTOX_SET,    SCR0, 0, 8, SCR1, 0, 2 },
+  { "fcm_yoffs_dir",    GOTOX_SET,    SCR1, 4, 1, -1, -1, -1 }, // substract yoffs instead of add
+  { "fcm_yoffs",        GOTOX_SET,    SCR1, 5, 3, -1, -1, -1 },
+  { "foreground_flag",  GOTOX_SET,    CLR0, 2, 1, -1, -1, -1 },
+  { "rowmask_flag",     GOTOX_SET,    CLR0, 3, 1, -1, -1, -1 },
+  { "background_flag",  GOTOX_SET,    CLR0, 6, 1, -1, -1, -1 },
+  { "transparent_flag", GOTOX_SET,    CLR0, 7, 1, -1, -1, -1 },
+  { "rowmask",          GOTOX_SET,    CLR1, 0, 8, -1, -1, -1 },
+  { NULL,               -1,           -1, -1, -1, -1, -1, -1 }
+};
+
 void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int x, int y)
 {
   printf("seam[%d][%d]:\n", y, x);
@@ -1722,12 +1759,12 @@ void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, 
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
   int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
 
-  mem_data* multimem = get_mem28array(scr_addr);
-  int scr0 = multimem->b[0];
-  int scr1 = multimem->b[1];
-  multimem = get_mem28array(clr_addr);
-  int clr0 = multimem->b[0];
-  int clr1 = multimem->b[1];
+  mem_data mem = get_mem(scr_addr, true);
+  int scr0 = mem.b[0];
+  int scr1 = mem.b[1];
+  mem = get_mem(clr_addr, true);
+  int clr0 = mem.b[0];
+  int clr1 = mem.b[1];
   printf("  $%08X : scr0 = $%02X : %%%s\n", scr_addr+0, scr0, toBinaryString(scr0));
   printf("  $%08X : scr1 = $%02X : %%%s\n", scr_addr+1, scr1, toBinaryString(scr1));
   printf("  $%08X : clr0 = $%02X : %%%s\n", clr_addr+0, clr0, toBinaryString(clr0));
@@ -1790,14 +1827,121 @@ void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, 
   printf("\n");
 }
 
+char* find_break_char(char *s, char *tokens) {
+  char *t = tokens;
+  char *f = NULL;
+  while (*t != '\0') {
+    f = strchr(s, *t);
+    if (f != NULL)
+      return f;
+    t++;
+  }
+  return NULL;
+}
+
+int find_bitfield_by_name(char *name)
+{
+  int k = 0;
+  while (bitfields[k].name != NULL) {
+    if (strcmp(name, bitfields[k].name) == 0) {
+      return k;
+    }
+    k++;
+  }
+  return -1;
+}
+
+
+void set_field(int* mem, int start_bit, int num_bits, int value)
+{
+    // Create a mask with the specified bit range set to 1
+    int mask = ((1 << num_bits) - 1) << start_bit;
+    
+    // Clear the bitfield in the original value (bitwise AND with the inverse of the mask)
+    *mem &= ~mask;
+    
+    // Shift the value into the correct position (align it to the starting bit)
+    value &= (1 << num_bits) - 1; // Ensure value fits within the specified bit width
+    *mem |= value << start_bit; // Set the value in the specified bitfield
+}
+
+
+void check_if_setting_field(int addr, int chars_per_row, char *str, int x, int y)
+{
+  char *start, *end;
+
+  char *s = strrchr(str, ']');
+  s++;
+  if (*s != '.')
+    return;
+
+  s++;
+  start = s;
+  end = find_break_char(start, " =");
+  if (end == NULL)
+    return;
+
+  bool eq_found = false;
+  if (*end == '=')
+    eq_found = true;
+
+  *end = '\0';
+
+  int bf = find_bitfield_by_name(start);
+  if (bf == -1) {
+    printf("ERROR: Unable to find seam bitfield name\n");
+    return;
+  }
+
+  if (!eq_found) {
+    s = end + 1;
+    end = strchr(s, '=');
+    if (end == NULL) {
+      printf("ERROR: '=' not found (TODO: print value of field instead)\n");
+      return;
+    }
+  }
+
+  s = end + 1;
+
+  int value = get_sym_value(s);
+
+  // read screen word
+  int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+
+  mem_data mem = get_mem(scr_addr, true);
+  int bytes[4];
+  bytes[SCR0] = mem.b[0];
+  bytes[SCR1] = mem.b[1];
+  mem = get_mem(clr_addr, true);
+  bytes[CLR0] = mem.b[0];
+  bytes[CLR1] = mem.b[1];
+
+  // apply segment 1
+  set_field(&bytes[bitfields[bf].byte_index1], bitfields[bf].start_bit1, bitfields[bf].num_bits1, value);
+  if (bitfields[bf].byte_index2 != -1)
+    set_field(&bytes[bitfields[bf].byte_index2], bitfields[bf].start_bit2, bitfields[bf].num_bits2, value >> bitfields[bf].num_bits1);
+
+  // poke it back to memory
+  sprintf(str, "s%X %x %x\n", scr_addr, bytes[SCR0], bytes[SCR1]);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+
+  sprintf(str, "s%X %x %x\n", clr_addr, bytes[CLR0], bytes[CLR1]);
+  serialWrite(str);
+  serialRead(inbuf, BUFSIZE);
+}
+
+
 void cmdSeam(void)
 {
   // get screen ram address at $D060-D063
-  mem_data* multimem = get_mem28array(0xffd305e);
-  int addr = multimem->b[2] + (multimem->b[3] << 8) + (multimem->b[4] << 16)
-    + ( (multimem->b[5] & 0x0f) << 24);
+  mem_data mem = get_mem(0xffd305e, true);
+  int addr = mem.b[2] + (mem.b[3] << 8) + (mem.b[4] << 16)
+    + ( (mem.b[5] & 0x0f) << 24);
   printf("$D060-$D063.0-3: screen address = $%08X\n", addr);
-  int chars_per_row = multimem->b[0] + ( (multimem->b[5] & 0x30) << 4);
+  int chars_per_row = mem.b[0] + ( (mem.b[5] & 0x30) << 4);
   printf("$D05E+$D063.4-5: chars per row = %d\n", chars_per_row);
 
   int reg_d054 = peek(0xffd3054);
@@ -1823,8 +1967,10 @@ void cmdSeam(void)
     return;
   }
 
-  if (ret == 1)
+  if (ret == 1) {
+    check_if_setting_field(addr, chars_per_row, str, x, y);
     print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+  }
 
   if (ret == 2)
   {
@@ -2231,6 +2377,24 @@ void cmdPalette(void)
     unsigned int b = palette_mem[2*256 + k];
     printf("idx# 0x%02X: " KINV "\x1b[38;2;%u;%u;%um " KNRM " %02X%02X%02X (%u, %u, %u)\n", k, r, g, b, r, g, b, r, g, b);
   }
+}
+
+unsigned char* get_palette(void)
+{
+  static unsigned char paldata[256];
+
+  unsigned char *palette_mem = get_palette_data();
+
+  for (int k = 0; k <= 255; k++)
+  {
+    unsigned int r = palette_mem[0*256 + k];
+    unsigned int g = palette_mem[1*256 + k];
+    unsigned int b = palette_mem[2*256 + k];
+
+    paldata[k] = (r << 16) + (g << 8) + b;
+  }
+
+  return paldata;
 }
 
 

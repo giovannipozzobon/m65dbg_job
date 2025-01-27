@@ -111,8 +111,27 @@ void ctrlc_handler(int s)
   ctrlcflag = true;
 }
 
-//static int nf;
-//static char** files;
+extern BitfieldInfo bitfields[];
+
+char* seam_field_gen(const char* text, int state)
+{
+    static int list_index, len;
+    const char *name;
+
+    if (!state) {
+        list_index = 0;
+        len = strlen(text);
+    }
+
+    while ((name = bitfields[list_index++].name)) {
+        if (strncmp(name, text, len) == 0) {
+            return strdup(name); // Match found
+        }
+    }
+
+    return NULL; // No more matches
+}
+
 
 char* my_generator(const char* text, int state)
 {
@@ -154,17 +173,24 @@ char* my_generator(const char* text, int state)
   return((char *)NULL);
 }
 
+
 static char** my_completion(const char * text, int start, int end)
 {
     char **matches;
+    int idx1, idx2, matched_chars;
     matches = (char **)NULL;
     //if( start == 0 )
     //{
-        matches = rl_completion_matches((char*)text, &my_generator);
+    if (sscanf(rl_line_buffer, "seam[%d][%d].%n", &idx1, &idx2, &matched_chars) == 2
+        && matched_chars > 0 && rl_line_buffer[matched_chars - 1] == '.') {
+      matches = rl_completion_matches(text, &seam_field_gen);
+    }
+    else
+      matches = rl_completion_matches((char*)text, &my_generator);
     //}
     //else
     //  rl_bind_key('\t',rl_insert);
-    return( matches );
+    return matches;
 }
 
 void load_init_file(char* filepath)
@@ -216,7 +242,7 @@ void run_m65dbg_init_file_commands()
   load_init_file(".m65dbg_init");
 }
 
-const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*";  // adding the '*' onto basic word break chars
+const char *dbg_word_break_chars = " \t\n\"\\'`@$><=;|&{(*.";  // adding the '*' and '.' onto basic word break chars
 const char *history_file = ".history.txt";
 
 /**
