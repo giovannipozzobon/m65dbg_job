@@ -1728,7 +1728,6 @@ int parse_indices(char* str, int* x, int* y)
 BitfieldInfo bitfields[] = {
   { "char_number",      GOTOX_CLEAR,  SCR0, 0, 8, SCR1, 0, 5 },
   { "rhs_trim",         GOTOX_CLEAR,  SCR1, 5, 3, CLR0, 2, 1 },
-  { "topbot_trim",      GOTOX_CLEAR,  CLR0, 0, 2, -1, -1, -1 },
   { "ncm_flag",         GOTOX_CLEAR,  CLR0, 3, 1, -1, -1, -1 },
   { "gotox_flag",       GOTOX_EITHER, CLR0, 4, 1, -1, -1, -1 },
   { "alpha_mode",       GOTOX_CLEAR,  CLR0, 5, 1, -1, -1, -1 },
