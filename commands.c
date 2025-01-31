@@ -1739,7 +1739,7 @@ BitfieldInfo bitfields[] = {
   { "bold",             GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 6, 1, -1, -1, -1 },
   { "underline",        GOTOX_CLEAR | V3_EXT_ATTR, CLR1, 7, 1, -1, -1, -1 },
   { "clr_8bit",         GOTOX_CLEAR | V2_MCM, CLR1, 0, 8, -1, -1, -1 },
-  { "goto_x",        GOTOX_SET,    SCR0, 0, 8, SCR1, 0, 2 },
+  { "gotox_pos",        GOTOX_SET,    SCR0, 0, 8, SCR1, 0, 2 },
   { "fcm_yoffs_dir",    GOTOX_SET,    SCR1, 4, 1, -1, -1, -1 }, // substract yoffs instead of add
   { "fcm_yoffs",        GOTOX_SET,    SCR1, 5, 3, -1, -1, -1 },
   { "foreground_flag",  GOTOX_SET,    CLR0, 2, 1, -1, -1, -1 },
