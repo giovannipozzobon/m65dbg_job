@@ -48,6 +48,12 @@ typedef struct
   char name[256];
 } rom_chunk;
 
+typedef struct {
+  bool found;
+  int start_bit;
+  int num_bits;
+} poke_bitfield_info;
+
 rom_chunk rom_chunks[] = {
   { 0x20000, "(C65 DOS chunk 1)" },
   { 0x22000, "(C65 DOS chunk 2)" },
@@ -190,7 +196,7 @@ void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal
 void print_word_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_dword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
 void print_qword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
-char* toBinaryString(int val);
+char* toBinaryString(int val, poke_bitfield_info* bfi);
 
 char* get_extension(char* fname)
 {
@@ -1475,6 +1481,7 @@ void load_KickAss_list(char* fname)
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
 #define KINV  "\x1B[7m"
+#define KINV_OFF "\x1B[27m"
 #define KCLEAR "\x1B[2J"
 #define KPOS0_0 "\x1B[1;1H"
 
@@ -1609,11 +1616,17 @@ mem_data get_mem(int addr, bool useAddr28)
 
 int peek(unsigned int address)
 {
+  mem_data mem = get_mem(address, false);
+  return mem.b[0];
+}
+
+int mpeek(unsigned int address)
+{
   mem_data mem = get_mem(address, true);
   return mem.b[0];
 }
 
-int peekw(unsigned int address)
+int mpeekw(unsigned int address)
 {
   mem_data mem = get_mem(address, true);
   return mem.b[0] + (mem.b[1] << 8);
@@ -1764,10 +1777,10 @@ void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, 
   mem = get_mem(clr_addr, true);
   int clr0 = mem.b[0];
   int clr1 = mem.b[1];
-  printf("  $%08X : scr0 = $%02X : %%%s\n", scr_addr+0, scr0, toBinaryString(scr0));
-  printf("  $%08X : scr1 = $%02X : %%%s\n", scr_addr+1, scr1, toBinaryString(scr1));
-  printf("  $%08X : clr0 = $%02X : %%%s\n", clr_addr+0, clr0, toBinaryString(clr0));
-  printf("  $%08X : clr1 = $%02X : %%%s\n", clr_addr+1, clr1, toBinaryString(clr1));
+  printf("  $%08X : scr0 = $%02X : %%%s\n", scr_addr+0, scr0, toBinaryString(scr0, NULL));
+  printf("  $%08X : scr1 = $%02X : %%%s\n", scr_addr+1, scr1, toBinaryString(scr1, NULL));
+  printf("  $%08X : clr0 = $%02X : %%%s\n", clr_addr+0, clr0, toBinaryString(clr0, NULL));
+  printf("  $%08X : clr1 = $%02X : %%%s\n", clr_addr+1, clr1, toBinaryString(clr1, NULL));
   
   // check if GOTOX is SET
   if (clr0 & 0x10) {
@@ -1787,7 +1800,7 @@ void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, 
     printf("  .rowmask_flag = %d\n", rowmask_flag);
     printf("  .foreground_flag = %d\n", foreground_flag); 
 
-    printf("  .rowmask = %%%s\n", toBinaryString(clr1));
+    printf("  .rowmask = %%%s\n", toBinaryString(clr1, NULL));
   }
   // else GOTOX is CLEAR
   else {
@@ -1943,7 +1956,7 @@ void cmdSeam(void)
   int chars_per_row = mem.b[0] + ( (mem.b[5] & 0x30) << 4);
   printf("$D05E+$D063.4-5: chars per row = %d\n", chars_per_row);
 
-  int reg_d054 = peek(0xffd3054);
+  int reg_d054 = mpeek(0xffd3054);
   int chr16 = reg_d054 & 1;
   int fclrlo = reg_d054 & 2 ? 1 : 0;
   int fclrhi = reg_d054 & 4 ? 1 : 0;
@@ -1951,9 +1964,9 @@ void cmdSeam(void)
   printf("$D054.1: FCLRLO = %d\n", fclrlo);
   printf("$D054.2: FCLRHI = %d\n", fclrhi);
 
-  int mcm_flag = (peek(0xffd3016) & 0x10) ? 1 : 0;
+  int mcm_flag = (mpeek(0xffd3016) & 0x10) ? 1 : 0;
   printf("$D016.4: mcm_flag = %d\n", mcm_flag);
-  int ext_attrib_flag = (peek(0xffd3031) & 0x20) ? 1 : 0;
+  int ext_attrib_flag = (mpeek(0xffd3031) & 0x20) ? 1 : 0;
   printf("$D031.5: ext_attrib_flag = %d\n", ext_attrib_flag);
   printf("\n");
 
@@ -2176,7 +2189,7 @@ void cmdSprite(void)
     spridx = get_sym_value(strSprIdx+1);
   }
 
-  int vic_16kb_bank = peek(0xffd3d00) & 0x03;
+  int vic_16kb_bank = mpeek(0xffd3d00) & 0x03;
   int vic_addr = (3 - vic_16kb_bank) * 0x4000;
   int spr_addr = vic_addr + spridx * 64;
 
@@ -2472,9 +2485,9 @@ void cmdChar(void)
     }
   }
 
-  int vic_16kb_bank = peek(0xffd3d00) & 0x03;
+  int vic_16kb_bank = mpeek(0xffd3d00) & 0x03;
   int vic_addr = (3 - vic_16kb_bank) * 0x4000;
-  int chr_data_base_addr_selector = (peek(0xffd3018) >> 1) & 0x07;
+  int chr_data_base_addr_selector = (mpeek(0xffd3018) >> 1) & 0x07;
   int chr_data_base_addr = vic_addr + 0x800 * chr_data_base_addr_selector;
   int chr_addr = chr_data_base_addr + chridx * 8;
 
@@ -2519,6 +2532,37 @@ void cmdChar(void)
   printf("+\n");
 }
 
+poke_bitfield_info find_bitfield(char* str)
+{
+  int start_bit, end_bit, matched_chars;
+  poke_bitfield_info bfi;
+  bfi.found = false;
+
+  char* f = strchr(str, '.');
+  if (f == NULL)
+    return bfi;
+
+  *f = '\0';
+  f++;
+  if (sscanf(f, "%d-%d %n", &start_bit, &end_bit, &matched_chars) == 2) {
+    if (start_bit > end_bit) {
+      int swap = start_bit;
+      start_bit = end_bit;
+      end_bit = swap;
+    }
+
+    bfi.found = true;
+    bfi.start_bit = start_bit;
+    bfi.num_bits = end_bit - start_bit + 1;
+  }
+  else if (sscanf(f, "%d %n", &start_bit, &matched_chars) == 1) {
+    bfi.found = true;
+    bfi.start_bit = start_bit;
+    bfi.num_bits = 1;
+  }
+
+  return bfi;
+}
 
 void cmd_poke(int size, bool is_addr28)
 {
@@ -2528,6 +2572,11 @@ void cmd_poke(int size, bool is_addr28)
   {
     printf("Missing <addr> parameter!\n");
     return;
+  }
+
+  poke_bitfield_info bfi = {0};
+  if (size == 1) {  // bitfield support is only available for poke & mpoke (not pokew/poked/pokeq)
+    bfi = find_bitfield(strAddr);
   }
 
   int addr28 = get_sym_value(strAddr);
@@ -2540,15 +2589,34 @@ void cmd_poke(int size, bool is_addr28)
   char str[10] = "";
   char * strVal;
   unsigned long val;
-  while ( (strVal = strtok(NULL, " ")) != NULL)
-  {
-    sscanf(strVal, "%lX", &val);
 
-    for (int k = 0; k < size; k++)
-    {
-      sprintf(str, " %lX", val & 0xff);
+  if (bfi.found) {  // are we updating just a bitfield section?
+    if ( (strVal = strtok(NULL, " ")) != NULL) {
+      sscanf(strVal, "%lX", &val);
+
+      int memval;
+      int oldmemval;
+      oldmemval = mpeek(addr28);
+      memval = oldmemval;
+      set_field(&memval, bfi.start_bit, bfi.num_bits, val);
+
+      sprintf(str, " %X", memval & 0xff);
       strcat(outbuf, str);
-      val >>= 8;
+      printf("\x1b[38;2;255;0;0mBEFORE: $%02X : %%%s\n", oldmemval, toBinaryString(oldmemval, &bfi));
+      printf("\x1b[38;2;0;255;0m AFTER: $%02X : %%%s%s\n", memval, toBinaryString(memval, &bfi), KNRM);
+    }
+  }
+  else {  // we poke to a normal address, byte per byte
+    while ( (strVal = strtok(NULL, " ")) != NULL)
+    {
+      sscanf(strVal, "%lX", &val);
+
+      for (int k = 0; k < size; k++)
+      {
+        sprintf(str, " %lX", val & 0xff);
+        strcat(outbuf, str);
+        val >>= 8;
+      }
     }
   }
 
@@ -5059,8 +5127,8 @@ char* get_rom_chunk_name(int mb, int addr)
 
 void cmdMapping(void)
 {
-  int reg_01 = peek(0x01);
-  int reg_d030 = peek(0xffd3030);
+  int reg_01 = mpeek(0x01);
+  int reg_d030 = mpeek(0xffd3030);
 
   stop_cpu_if_running();
 
@@ -5070,8 +5138,8 @@ void cmdMapping(void)
 
   call_temp_routine(getmapping_routine);
 
-  int mb_mapl = peek(0x0204);
-  int mb_maph = peek(0x0205);
+  int mb_mapl = mpeek(0x0204);
+  int mb_maph = mpeek(0x0205);
 
   set_mem(0x0200, orig_mem);
 
@@ -5212,9 +5280,10 @@ int parseBinaryString(char* str)
   return val;
 }
 
-char* toBinaryString(int val)
+char* toBinaryString(int val, poke_bitfield_info* bfi)
 {
-  static char str[64];
+  static char str[128] = "";
+  str[0] = '\0';
 
   int maxbit = (1 << 31);
   if (val/65536 == 0)
@@ -5222,24 +5291,32 @@ char* toBinaryString(int val)
   if (val/256 == 0)
     maxbit = (1 << 7);
 
-  int cnt = 0;
   int bitcnt = 0;
   for (int k = maxbit; k > 0; k >>= 1)
   {
-    if (val & k)
-      str[cnt] = '1';
-    else
-      str[cnt] = '0';
+    if (bfi != NULL) {
+      if (k == 1 << (bfi->start_bit + bfi->num_bits - 1)) {
+        strcat(str, KINV);
+      }
+    }
 
-    cnt++;
+    if (val & k)
+      strcat(str, "1");
+    else
+      strcat(str, "0");
+
+    if (bfi != NULL) {
+      if (k == 1 << (bfi->start_bit)) {
+        strcat(str, KINV_OFF);
+      }
+    }
+
     bitcnt++;
     if ( (bitcnt % 4) == 0)
     {
-      str[cnt] = ' ';
-      cnt++;
+      strcat(str, " ");
     }
   }
-  str[cnt] = '\0';
   return str;
 }
 
@@ -5273,7 +5350,7 @@ void cmdPrintValue(void)
     val = origval;
   }
 
-  printf("  $%04X  /  %d  /  %%%s %s\n", val, val, toBinaryString(val), charval);
+  printf("  $%04X  /  %d  /  %%%s %s\n", val, val, toBinaryString(val, NULL), charval);
 }
 
 int isCpuStopped(void)
