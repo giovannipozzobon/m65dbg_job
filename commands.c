@@ -5264,11 +5264,13 @@ void cmdPrintValue(void)
     val = get_sym_value(strVal);
 
   char charval[64] = "";
+  int origval = val;
   if (val >= 32 && val < 256) {
     if (val >= 192 && val <= 223)
       val -= 96;
 
     sprintf(charval, "(char='%c')", val);
+    val = origval;
   }
 
   printf("  $%04X  /  %d  /  %%%s %s\n", val, val, toBinaryString(val), charval);
