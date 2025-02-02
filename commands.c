@@ -18,6 +18,7 @@
 
 int get_sym_value(char* token);
 void print_char(int c);
+int parseBinaryString(char* str);
 
 typedef struct
 {
@@ -168,7 +169,7 @@ type_command_details command_details[] =
   { "fastmode", cmdFastMode, "0/1", "Used to quickly switch between 2,000,000bps (slow-mode: default) or 4,000,000bps (fast-mode: used in ftp-mode)" },
   { "scope", cmdScope, "<int>", "the scope-size of the listing to show alongside the disassembly" },
   { "offs", cmdOffs, "<int>", "the offset of the listing to show alongside the disassembly" },
-  { "val", cmdPrintValue, "<$hex/dec/\%bin/>", "print the given value in hex, decimal and binary" },
+  { "val", cmdPrintValue, "<hex/#dec/\%bin/>", "print the given value in hex, decimal and binary" },
   { "=", cmdForwardDis, "[<count>]", "move forward in disassembly of pc history from 'z' command" },
   { "-", cmdBackwardDis, "[<count>]", "move backward in disassembly of pc history from 'z' command" },
   { "mcopy", cmdMCopy, "<src_addr> <dest_addr> <count>", "copy data from source location to destination (28-bit addresses)" },
@@ -2592,7 +2593,7 @@ void cmd_poke(int size, bool is_addr28)
 
   if (bfi.found) {  // are we updating just a bitfield section?
     if ( (strVal = strtok(NULL, " ")) != NULL) {
-      sscanf(strVal, "%lX", &val);
+      val = get_sym_value(strVal);
 
       int memval;
       int oldmemval;
@@ -2609,7 +2610,7 @@ void cmd_poke(int size, bool is_addr28)
   else {  // we poke to a normal address, byte per byte
     while ( (strVal = strtok(NULL, " ")) != NULL)
     {
-      sscanf(strVal, "%lX", &val);
+      val = get_sym_value(strVal);
 
       for (int k = 0; k < size; k++)
       {
@@ -4040,6 +4041,17 @@ int get_sym_value(char* token)
   int deref_cnt = 0;
   int addr = 0;
 
+  // '#' prefix = decimal value
+  if (token[0] == '#') {
+    sscanf(token+1, "%d", &addr);
+    return addr;
+  }
+  // '%' prefix = binary value
+  else if (token[0] == '%') {
+    addr = parseBinaryString(token+1);
+    return addr;
+  }
+
   // check if we're de-referencing a 16-bit pointer
   while (token[0] == '*')
   {
@@ -5331,14 +5343,7 @@ void cmdPrintValue(void)
   }
 
   int val = 0;
-  if (strVal[0] == '$')
-    val = get_sym_value(strVal+1);
-  else if (strVal[0] == '%')
-    val = parseBinaryString(strVal+1);
-  else if (isdigit((int)strVal[0]))
-    sscanf(strVal, "%d", &val);
-  else
-    val = get_sym_value(strVal);
+  val = get_sym_value(strVal);
 
   char charval[64] = "";
   int origval = val;
@@ -5350,7 +5355,7 @@ void cmdPrintValue(void)
     val = origval;
   }
 
-  printf("  $%04X  /  %d  /  %%%s %s\n", val, val, toBinaryString(val, NULL), charval);
+  printf("  $%04X  /  #%d  /  %%%s %s\n", val, val, toBinaryString(val, NULL), charval);
 }
 
 int isCpuStopped(void)
