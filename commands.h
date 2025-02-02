@@ -153,6 +153,7 @@ typedef struct we
   type_watch type;
   bool show_decimal;
   bool show_char;
+  bool show_binary;
   char* name;
   char* param1;
   struct we* next;
