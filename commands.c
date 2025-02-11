@@ -4925,19 +4925,24 @@ void cmdHyppo(void)
     sprintf(lda_cmd, "lda #$%02X", hyppo_services[hs_idx].a);
     sprintf(sta_cmd, "sta $%04X", hyppo_services[hs_idx].addr);
 
-    char* hyppo_routine[] = { "pha", lda_cmd, sta_cmd, "clv", "pla", NULL };
+    char* hyppo_routine[] = { "pha", "phx", "phy", "phz", "php", lda_cmd, sta_cmd, "clv", NULL };
 
-    for (int k = 1; k < 4; k++) {
+    for (int k = 5; k < 8; k++) {
       printf("  %s\n", hyppo_routine[k]);
     }
 
     call_temp_routine(hyppo_routine);
 
     reg_data reg = get_regs();
+
+    char* cleanup_routine[] = { "plp", "plz", "ply", "plx", "pla", NULL };
+    call_temp_routine(cleanup_routine);
+
     show_regs(&reg);
 
     if (hyppo_services[hs_idx].outputfn != NULL)
       hyppo_services[hs_idx].outputfn(&reg);
+
   }
 }
 
