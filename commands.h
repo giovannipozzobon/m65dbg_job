@@ -86,6 +86,7 @@ void cmdChar(void);
 void cmdSet(void);
 void cmdGo(void);
 void cmdPalette(void);
+void cmdHyppo(void);
 void cmdReload(void);
 void cmdRomW(void);
 int doOneShotAssembly(char* strCommand);
@@ -111,6 +112,30 @@ typedef struct {
     uint8_t num_bits2;             // Number of bits in the second byte
 } BitfieldInfo;
 
+typedef struct
+{
+  int pc;
+  int a;
+  int x;
+  int y;
+  int z;
+  int b;
+  int sp;
+  int mapl;
+  int maph;
+  int lastop;
+  int odd1;   // what is this?
+  int odd2;   // what is this?
+  char flags[16];
+} reg_data;
+
+typedef struct {
+  const char* name;
+  int addr;
+  int a;
+  void (*inputfn)(void);
+  void (*outputfn)(reg_data* reg);
+} hyppo_det;
 
 
 typedef struct
