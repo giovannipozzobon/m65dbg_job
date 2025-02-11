@@ -119,6 +119,7 @@ void out_errorcode(reg_data* reg)
       printf("Error code: $%02X - %s\n", reg->a, hyppo_errors[k].desc);
       return;
     }
+    k++;
   }
 
   printf("??? Unknown error code: $%02X\n", reg->a);
