@@ -1876,13 +1876,13 @@ BitfieldInfo bitfields[] = {
   { NULL,               -1,           -1, -1, -1, -1, -1, -1 }
 };
 
-void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int x, int y)
+void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int clr_base, int x, int y)
 {
   printf("seam[%d][%d]:\n", y, x);
 
   // read screen word
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
-  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + clr_base + y * (chars_per_row * 2) + (x * 2);
 
   mem_data mem = get_mem(scr_addr, true);
   int scr0 = mem.b[0];
@@ -1996,7 +1996,7 @@ void set_field(int* mem, int start_bit, int num_bits, int value)
 }
 
 
-void check_if_setting_field(int addr, int chars_per_row, char *str, int x, int y)
+void check_if_setting_field(int addr, int chars_per_row, int clr_base, char *str, int x, int y)
 {
   char *start, *end;
 
@@ -2038,7 +2038,7 @@ void check_if_setting_field(int addr, int chars_per_row, char *str, int x, int y
 
   // read screen word
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
-  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + clr_base + y * (chars_per_row * 2) + (x * 2);
 
   mem_data mem = get_mem(scr_addr, true);
   int bytes[4];
@@ -2078,9 +2078,12 @@ void cmdSeam(void)
   int chr16 = reg_d054 & 1;
   int fclrlo = reg_d054 & 2 ? 1 : 0;
   int fclrhi = reg_d054 & 4 ? 1 : 0;
+  int clr_base = mpeek(0xffd3064) + (mpeek(0xffd3065) << 8);
+
   printf("$D054.0: CHR16 = %d\n", chr16);
   printf("$D054.1: FCLRLO = %d\n", fclrlo);
   printf("$D054.2: FCLRHI = %d\n", fclrhi);
+  printf("$D064-$D065: COLPTR = $%04X\n", clr_base);
 
   int mcm_flag = (mpeek(0xffd3016) & 0x10) ? 1 : 0;
   printf("$D016.4: mcm_flag = %d\n", mcm_flag);
@@ -2098,15 +2101,15 @@ void cmdSeam(void)
   }
 
   if (ret == 1) {
-    check_if_setting_field(addr, chars_per_row, str, x, y);
-    print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+    check_if_setting_field(addr, chars_per_row, clr_base, str, x, y);
+    print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, clr_base, x, y);
   }
 
   if (ret == 2)
   {
     for (x = 0; x < chars_per_row; x++)
     {
-      print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+      print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, clr_base, x, y);
 
       if (ctrlcflag)
         break;
