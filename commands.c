@@ -37,23 +37,6 @@ unsigned char* get_palette(void);
 
 typedef struct
 {
-  int pc;
-  int a;
-  int x;
-  int y;
-  int z;
-  int b;
-  int sp;
-  int mapl;
-  int maph;
-  int lastop;
-  int odd1;   // what is this?
-  int odd2;   // what is this?
-  char flags[16];
-} reg_data;
-
-typedef struct
-{
   int addr;
   unsigned int b[16];
 } mem_data;
@@ -88,6 +71,71 @@ rom_chunk rom_chunks[] = {
   { 0x3c000, "(C65 KERNAL chunk 2 + CHARSET-B)" },
   { 0x3e000, "(C65 EDITOR + C65 KERNAL chunk 3)" },
   { 0, "" }
+};
+
+typedef struct {
+  int code;
+  const char* desc;
+} hyppo_err;
+
+hyppo_err hyppo_errors[] = {
+  { 0x00, "no error" },
+  { 0x01, "partition not interesting" },
+  { 0x02, "bad signature" },
+  { 0x03, "is small FAT" },
+  { 0x04, "too many reserved clusters" },
+  { 0x05, "not two FATs" },
+  { 0x06, "too few clusters" },
+  { 0x07, "read timeout" },
+  { 0x08, "partition error" },
+  { 0x10, "invalid address" },
+  { 0x11, "illegal value" },
+  { 0x20, "read error" },
+  { 0x21, "write error" },
+  { 0x80, "no such drive" },
+  { 0x81, "name too long" },
+  { 0x82, "hyppo service not implemented" },
+  { 0x83, "file too long (>16MB)" },
+  { 0x84, "too many open files" },
+  { 0x85, "invalid cluster" },
+  { 0x86, "is a directory" },
+  { 0x87, "not a directory" },
+  { 0x88, "file not found" },
+  { 0x89, "invalid file descriptor" },
+  { 0x8a, "image wrong length" },
+  { 0x8b, "image fragmented" },
+  { 0x8c, "no space" },
+  { 0x8d, "file exists" },
+  { 0x8e, "directory full" },
+  { 0x8f, "eof / no such trap" },
+  { -1,   NULL }
+};
+
+void out_errorcode(reg_data* reg)
+{
+  int k = 0;
+  while (hyppo_errors[k].code != -1) {
+    if (hyppo_errors[k].code == reg->a) {
+      printf("Error code: $%02X - %s\n", reg->a, hyppo_errors[k].desc);
+      return;
+    }
+    k++;
+  }
+
+  printf("??? Unknown error code: $%02X\n", reg->a);
+}
+
+void out_getversion(reg_data* reg)
+{
+  printf("Hyppo V%d.%d\n", reg->a, reg->x);
+  printf("HDOS  V%d.%d\n", reg->y, reg->z);
+}
+
+hyppo_det hyppo_services[] = {
+  { "geterrorcode",         0xd640, 0x38, NULL, out_errorcode },
+  { "getversion",           0xd640, 0x00, NULL, out_getversion },
+  { "setup_transfer_area",  0xd640, 0x3a, NULL, NULL },
+  { NULL,                   0,      0,    NULL, NULL }
 };
 
 bool outputFlag = true;
@@ -203,6 +251,7 @@ type_command_details command_details[] =
   { "reload", cmdReload, NULL, "reloads any list and map files (in-case you've rebuilt them recently)" },
   { "go", cmdGo, "<addr>", "sets the PC to the desired address." },
   { "palette", cmdPalette, "<startidx> <endidx>", "Shows details of the palette for the given range. If no range given, the first 32 colour indices are selected." },
+  { "hyppo", cmdHyppo, "<servicename>", "Performs the desired hyppo call. Note that in many cases, you will have to prepare inputs prior to this call, and assess outputs after the call." },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -1827,13 +1876,13 @@ BitfieldInfo bitfields[] = {
   { NULL,               -1,           -1, -1, -1, -1, -1, -1 }
 };
 
-void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int x, int y)
+void print_seam(int addr, int chars_per_row, int mcm_flag, int ext_attrib_flag, int clr_base, int x, int y)
 {
   printf("seam[%d][%d]:\n", y, x);
 
   // read screen word
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
-  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + clr_base + y * (chars_per_row * 2) + (x * 2);
 
   mem_data mem = get_mem(scr_addr, true);
   int scr0 = mem.b[0];
@@ -1947,7 +1996,7 @@ void set_field(int* mem, int start_bit, int num_bits, int value)
 }
 
 
-void check_if_setting_field(int addr, int chars_per_row, char *str, int x, int y)
+void check_if_setting_field(int addr, int chars_per_row, int clr_base, char *str, int x, int y)
 {
   char *start, *end;
 
@@ -1989,7 +2038,7 @@ void check_if_setting_field(int addr, int chars_per_row, char *str, int x, int y
 
   // read screen word
   int scr_addr = addr + y * (chars_per_row * 2) + (x * 2);
-  int clr_addr = 0xff80000 + y * (chars_per_row * 2) + (x * 2);
+  int clr_addr = 0xff80000 + clr_base + y * (chars_per_row * 2) + (x * 2);
 
   mem_data mem = get_mem(scr_addr, true);
   int bytes[4];
@@ -2029,9 +2078,12 @@ void cmdSeam(void)
   int chr16 = reg_d054 & 1;
   int fclrlo = reg_d054 & 2 ? 1 : 0;
   int fclrhi = reg_d054 & 4 ? 1 : 0;
+  int clr_base = mpeek(0xffd3064) + (mpeek(0xffd3065) << 8);
+
   printf("$D054.0: CHR16 = %d\n", chr16);
   printf("$D054.1: FCLRLO = %d\n", fclrlo);
   printf("$D054.2: FCLRHI = %d\n", fclrhi);
+  printf("$D064-$D065: COLPTR = $%04X\n", clr_base);
 
   int mcm_flag = (mpeek(0xffd3016) & 0x10) ? 1 : 0;
   printf("$D016.4: mcm_flag = %d\n", mcm_flag);
@@ -2049,15 +2101,15 @@ void cmdSeam(void)
   }
 
   if (ret == 1) {
-    check_if_setting_field(addr, chars_per_row, str, x, y);
-    print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+    check_if_setting_field(addr, chars_per_row, clr_base, str, x, y);
+    print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, clr_base, x, y);
   }
 
   if (ret == 2)
   {
     for (x = 0; x < chars_per_row; x++)
     {
-      print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, x, y);
+      print_seam(addr, chars_per_row, mcm_flag, ext_attrib_flag, clr_base, x, y);
 
       if (ctrlcflag)
         break;
@@ -4846,6 +4898,58 @@ void cmdRomW(void)
 
   set_rom_writable(romw);
 }
+
+int find_hyppo_service_by_name(char *name)
+{
+  int k = 0;
+  while (hyppo_services[k].name != NULL) {
+    if (strcmp(name, hyppo_services[k].name) == 0) {
+      return k;
+    }
+    k++;
+  }
+  return -1;
+}
+
+void cmdHyppo(void)
+{
+  char* token = strtok(NULL, " ");
+
+  if (token != NULL) {
+    int hs_idx = find_hyppo_service_by_name(token);
+
+    if (hs_idx == -1) {
+      printf("ERROR: hyppo service not found\n");
+      return;
+    }
+
+    char lda_cmd[16];
+    char sta_cmd[16];
+
+    sprintf(lda_cmd, "lda #$%02X", hyppo_services[hs_idx].a);
+    sprintf(sta_cmd, "sta $%04X", hyppo_services[hs_idx].addr);
+
+    char* hyppo_routine[] = { "pha", "phx", "phy", "phz", "php", lda_cmd, sta_cmd, "clv", NULL };
+
+    for (int k = 5; k < 8; k++) {
+      printf("  %s\n", hyppo_routine[k]);
+    }
+
+    call_temp_routine(hyppo_routine);
+
+    reg_data reg = get_regs();
+
+    char* cleanup_routine[] = { "plp", "plz", "ply", "plx", "pla", NULL };
+    call_temp_routine(cleanup_routine);
+
+    show_regs(&reg);
+
+    if (hyppo_services[hs_idx].outputfn != NULL)
+      hyppo_services[hs_idx].outputfn(&reg);
+
+  }
+}
+
 
 void cmdAutoClearScreen(void)
 {

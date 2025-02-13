@@ -112,6 +112,7 @@ void ctrlc_handler(int s)
 }
 
 extern BitfieldInfo bitfields[];
+extern hyppo_det hyppo_services[];
 
 char* seam_field_gen(const char* text, int state)
 {
@@ -124,6 +125,25 @@ char* seam_field_gen(const char* text, int state)
     }
 
     while ((name = bitfields[list_index++].name)) {
+        if (strncmp(name, text, len) == 0) {
+            return strdup(name); // Match found
+        }
+    }
+
+    return NULL; // No more matches
+}
+
+char* hyppo_service_gen(const char* text, int state)
+{
+    static int list_index, len;
+    const char *name;
+
+    if (!state) {
+        list_index = 0;
+        len = strlen(text);
+    }
+
+    while ((name = hyppo_services[list_index++].name)) {
         if (strncmp(name, text, len) == 0) {
             return strdup(name); // Match found
         }
@@ -184,6 +204,9 @@ static char** my_completion(const char * text, int start, int end)
     if (sscanf(rl_line_buffer, "seam[%d][%d].%n", &idx1, &idx2, &matched_chars) == 2
         && matched_chars > 0 && rl_line_buffer[matched_chars - 1] == '.') {
       matches = rl_completion_matches(text, &seam_field_gen);
+    }
+    else if (strncmp(rl_line_buffer, "hyppo ", 6) == 0) {
+      matches = rl_completion_matches(text, &hyppo_service_gen);
     }
     else
       matches = rl_completion_matches((char*)text, &my_generator);
