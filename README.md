@@ -17,7 +17,7 @@ The “m65dbg” tool is a command-line based enhanced remote serial debugger/mo
 
 Latest detailed documentation can be found here:
 
-* https://docs.google.com/document/d/1cEhHvvc1E47UgSoXvKPpwnf43l20sLPY-y-ZuQ4b_ng/edit
+* https://docs.google.com/document/d/1cEhHvvc1E47UgSoXvKPpwnf43l20sLPY-y-ZuQ4b_ng
 
 # The raw monitor
 
@@ -55,6 +55,8 @@ For a youtube video walkthrough, please visit:
 Here's some written points below:
 
 * Should build fine in Windows+Cygwin and Linux.
+  * Take a look at the latest docs to learn of build pre-requisites:
+    * https://docs.google.com/document/d/1cEhHvvc1E47UgSoXvKPpwnf43l20sLPY-y-ZuQ4b_ng
 * Mac OSX presently doesn't support the 2,000,000 bps serial speed. So as an alternative, you can make m65dbg instead talk to the xemu mega65 emulator via a unix socket.
   * More info at: 
 * Specify your serial port with the "**-l**" (or "**--device**) parameter, E.g., "**m65dbg -l /dev/ttyUSB1**"
