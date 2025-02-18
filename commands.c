@@ -291,6 +291,18 @@ typedef struct tfi
 type_funcinfo* lstFuncInfo = NULL;
 type_funcinfo* cur_func_info = NULL;
 
+typedef struct tcili
+{
+  char* chunk_name;
+  char* section;
+  int loc_start;
+  int loc_end;
+  int size;
+  struct tcili* next;
+} type_ci_chunk_info;
+
+type_ci_chunk_info* lstCalypsiChunkInfo = NULL;
+
 typedef struct tfl
 {
   int addr;
@@ -422,6 +434,40 @@ void add_to_func_list(type_funcinfo *fi)
     previter = iter;
     iter = iter->next;
   }
+}
+
+type_ci_chunk_info* add_calypsi_chunk_info(char* chunk_name, char* section, int loc_start, int loc_end, int size)
+{
+  type_ci_chunk_info* iter = lstCalypsiChunkInfo;
+
+  if (lstCalypsiChunkInfo == NULL) {
+    lstCalypsiChunkInfo = malloc(sizeof(type_ci_chunk_info));
+    lstCalypsiChunkInfo->chunk_name = strdup(chunk_name);
+    lstCalypsiChunkInfo->section = strdup(section);
+    lstCalypsiChunkInfo->loc_start = loc_start;
+    lstCalypsiChunkInfo->loc_end = loc_end;
+    lstCalypsiChunkInfo->size = size;
+    lstCalypsiChunkInfo->next = NULL;
+    return lstCalypsiChunkInfo;
+  }
+
+  while (iter != NULL) {
+    if (iter->next == NULL)
+    {
+      type_ci_chunk_info* cinew = malloc(sizeof(type_ci_chunk_info));
+      cinew->chunk_name = strdup(chunk_name);
+      cinew->section = strdup(section);
+      cinew->loc_start = loc_start;
+      cinew->loc_end = loc_end;
+      cinew->size = size;
+      cinew->next = NULL;
+
+      iter->next = cinew;
+      return cinew;
+    }
+    iter = iter->next;
+  }
+  return NULL;
 }
 
 type_fileloc* add_to_list(type_fileloc fl)
@@ -1544,6 +1590,319 @@ void load_kickass_map(char* fname)
   }
 }
 
+typedef struct {
+  int state;  // 0 = look for 'in section', 1 = look for 'placed at' (retrieve address)
+  char* line;
+  int lineno;
+  char* fname;
+  FILE* f;
+  bool is_linker_clst_file;
+  int cur_srcline;
+  int cur_rel_addr;
+  char chunk_name[64];
+} typ_calypsi_info;
+
+void parse_calypsi_linker_line(typ_calypsi_info* ci)
+{
+  static char chunk_name[64];
+  static char section[64];
+  static int loc_start, loc_end;
+  static int size;
+
+  switch (ci->state) {
+
+// modplay_reset in section 'code'
+ // placed at address 00004b9f-00004c57 of size 000000b9
+
+    case 0:   // look for 'in section' and 'placed at'
+      if (strstr(ci->line, "in section")) {
+
+        sscanf(ci->line, "%s in section '%s'", chunk_name, section);
+
+        ci->line = strstr(ci->line, "placed at address");
+        if (!ci->line)
+        {
+          ci->state = 1;
+          return;
+        }
+        sscanf(ci->line, "placed at address %08x-%08x of size %08x", &loc_start, &loc_end, &size);
+
+        add_calypsi_chunk_info(chunk_name, section, loc_start, loc_end, size);
+        ci->state = 2;
+      }
+      break;
+
+    case 1: // look for 'placed at' carried onto next line
+      ci->line = strstr(ci->line, "placed at address");
+      if (!ci->line) {
+        ci->state = 0;
+        return;
+      }
+      sscanf(ci->line, "placed at address %08x-%08x of size %08x", &loc_start, &loc_end, &size);
+
+      add_calypsi_chunk_info(chunk_name, section, loc_start, loc_end, size);
+      ci->state = 2;
+      break;
+
+    case 2: // look for 'Defines:'
+      if (strstr(ci->line, "Defines:"))
+        ci->state = 3;
+      if (strlen(ci->line) == 0)
+        ci->state = 0;
+      if (strlen(ci->line) == 1 && ci->line[0] == '\n')
+        ci->state = 0;
+      break;
+
+    case 3: // read out all defines
+      if (strstr(ci->line, "References:") ||
+          strstr(ci->line, "Referenced from:") ||
+          strlen(ci->line) == 0 || strlen(ci->line) == 1)
+      {
+        ci->state = 0;
+        break;
+      }
+      
+      char* p = get_nth_token(ci->line, 0);
+      printf("define chunk: %s\n", p);
+
+      if (!p) {
+        printf("ERROR: %s - line %d\n", ci->fname, ci->lineno);
+        printf("ci->line: '%s'\n", ci->line);
+      }
+
+      if (strcmp(p, chunk_name) != 0)
+        add_calypsi_chunk_info(p, section, loc_start, loc_end, size);
+      break;
+  }
+}
+
+int get_chunk_offset(char* chunk_name) {
+  type_ci_chunk_info* iter = lstCalypsiChunkInfo;
+
+  while (iter != NULL)
+  {
+    if (strcmp(iter->chunk_name, chunk_name) == 0)
+    {
+      return iter->loc_start;
+    }
+    iter = iter->next;
+  }
+
+  return -1;
+}
+
+void add_file_loc(typ_calypsi_info* ci)
+{
+  type_fileloc fl = { 0 };
+  int addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
+  fl.addr = addr;
+  fl.lastaddr = 0;
+  fl.file = ci->fname;
+  fl.lineno = ci->lineno;
+  fl.module = NULL;
+  add_to_list(fl);
+}
+
+void add_label_to_symmap(char* label, int addr)
+{
+  char label_name[64];
+  strcpy(label_name, label);
+  
+  // add to map?
+  type_symmap_entry sme;
+  // done earlier now
+  // int addr = cur_rel_addr + get_chunk_offset(chunk_name);
+  char sval[256];
+  sprintf(sval, "$%04X", addr);
+  sme.addr = addr;
+  sme.sval = sval;
+  sme.symbol = label_name;
+  add_to_symmap(sme);
+}
+
+void find_and_add_label(typ_calypsi_info* ci)
+{
+  int addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
+
+  char* p = get_nth_token(ci->line, 4);
+  if (p) {
+    if (strcmp(p, ".byte") == 0) {
+      p = get_nth_token(ci->line, 3);
+
+      if (get_chunk_offset(p) != -1) {
+        strcpy(ci->chunk_name, p);
+        addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
+      }
+      printf("label: '%s' @ $%04X (from .byte) - line#%d\n", p, addr, ci->lineno);
+      add_label_to_symmap(p, addr);
+    }
+  }
+
+  // look for any labels on this line (ending with ':')
+  char* e = strchr(ci->line, ':');
+  if (!e)
+    return;
+
+  if (e[1] == '\0' || e[1] == ' ' || e[1] == '\t'
+      || e[1] == '\r' || e[1] == '\n')
+  {
+    *e = '\0';
+    char* s = strrchr(ci->line, ' ');
+    if (s)
+    {
+      s++;
+      if (s[0] == '\t')
+        s++;
+
+      if (get_chunk_offset(s) != -1) {
+        strcpy(ci->chunk_name, s);
+        addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
+      }
+      printf("label: '%s' @ $%04X (from .byte) - line#%d\n", s, addr, ci->lineno);
+      add_label_to_symmap(s, addr);
+    }
+  }
+}
+
+bool find_public_chunk_name(typ_calypsi_info* ci)
+{
+  char* s;
+  // look for any .public <chunk_name>
+  s = strstr(ci->line, ".public ");
+  if (s) {
+    s += strlen(".public ");
+    strcpy(ci->chunk_name, s);
+
+    if (ci->chunk_name[strlen(ci->chunk_name)-1] == '\n')
+      ci->chunk_name[strlen(ci->chunk_name)-1] = '\0';
+
+    return true;
+  }
+  return false;
+}
+
+void parse_calypsi_compiler_line(typ_calypsi_info* ci)
+{
+  int val;
+
+  if (strlen(ci->line) >= 4 && sscanf(ci->line, "%04d", &val) == 1) {
+    ci->cur_srcline = val;
+
+    // E.g.: '0010                		.public audio_applyvolume'
+    if (find_public_chunk_name(ci))
+      return;
+
+    if (strlen(ci->line) >= 10 &&
+        ci->line[4] == ' ' && ci->line[5] == ' ' &&
+        ci->line[6] != ' ' && ci->line[7] != ' ' &&
+        ci->line[8] != ' ' && ci->line[9] != ' ' &&
+        ci->line[10] == ' ' &&
+        sscanf(ci->line+6, "%04x", &val) == 1)
+    {
+      ci->cur_rel_addr = val;
+
+      find_and_add_label(ci);
+      
+      add_file_loc(ci);
+    }
+  }
+  // E.g.: '    \ 0000                      .public mp_dmacopyjob'
+  if (sscanf(ci->line, "    \\ %04X ", &val) == 1) {
+    // sometimes a section just follows the one before it
+    // so it resets the cur_rel_addr to zero
+    // E.g.: (from 'main.clst' - IntroDisk - L#391)
+    //       '    \ 01df 4c....               jmp     `?L5`'
+    //       '    \ 0000                      .section code,text'
+    //       '    \ 0000 a97f     `?L32`:     lda     #127''
+    // (this is a case were the label dictates the chunk-name)
+    // (maybe like a 'private' chunk?)
+
+    ci->cur_rel_addr = val;
+
+    if (find_public_chunk_name(ci))
+      return;
+
+    find_and_add_label(ci);
+
+    add_file_loc(ci);
+  }
+}
+
+char* find_cmap_file(void)
+{
+  DIR           *d;
+  struct dirent *dir;
+  static char cmap_file[256];
+
+  d = opendir(".");
+  if (d)
+  {
+    while ((dir = readdir(d)) != NULL)
+    {
+      char* ext = get_extension(dir->d_name);
+      if (ext != NULL && strcmp(ext, ".cmap") == 0) {
+        strcpy(cmap_file, dir->d_name);
+        return cmap_file;
+      }
+    }
+  }
+  return NULL;
+}
+
+void load_calypsi_map(const char* fname)
+{
+  char* strMapFile = find_cmap_file();
+
+  if (strMapFile == NULL) {
+    printf("WARNING: Could not find .cmap file for Calypsi debugging\n");
+    return;
+  }
+
+  typ_calypsi_info ci = { 0 };
+  char line[1024];
+  ci.lineno = 0;
+
+  // check if file exists
+  if (access(strMapFile, F_OK) != -1)
+  {
+    printf("Loading \"%s\"...\n", strMapFile);
+
+    // load the map file
+    ci.f = fopen(strMapFile, "rt");
+    ci.fname = strMapFile;
+
+    while (!feof(ci.f))
+    {
+      fgets(line, 1024, ci.f);
+      ci.line = line;
+      ci.lineno++;
+
+      parse_calypsi_linker_line(&ci);
+    }
+  }
+
+  fclose(ci.f);
+}
+
+void load_calypsi_list(char* fname)
+{
+  typ_calypsi_info ci = { 0 };
+  char line[1024];
+
+  ci.f = fopen(fname, "rt");
+  ci.fname = fname;
+  ci.lineno = 0;
+
+  while (fgets(line, sizeof(line), ci.f) != NULL) {
+    ci.line = line;
+    ci.lineno++;
+
+    parse_calypsi_compiler_line(&ci);
+  }
+
+  fclose(ci.f);
+}
+
 
 void load_KickAss_list(char* fname)
 {
@@ -1632,8 +1991,10 @@ void show_location(type_fileloc* fl)
 // search the current directory for *.list files
 void listSearch(void)
 {
+  bool calypsi_map_loaded = false;
   DIR           *d;
   struct dirent *dir;
+
   d = opendir(".");
   if (d)
   {
@@ -1652,6 +2013,15 @@ void listSearch(void)
         printf("Loading \"%s\"...\n", dir->d_name);
         load_KickAss_list(dir->d_name);
       }   
+      if (ext != NULL && strcmp(ext, ".clst") == 0)
+      {
+        printf("Loading \"%s\"...\n", dir->d_name);
+        if (!calypsi_map_loaded) {
+          load_calypsi_map(dir->d_name);
+          calypsi_map_loaded = true;
+        }
+        load_calypsi_list(dir->d_name);
+      }
       // .lst = BSA Compiler for MEGA65 ROM
       if (ext != NULL && strcmp(ext, ".lst") == 0)
       {
@@ -2539,6 +2909,20 @@ unsigned char* get_palette(void)
 void clearListsAndMaps(void)
 {
   // clear list data
+  type_ci_chunk_info* iterCi = lstCalypsiChunkInfo;
+  type_ci_chunk_info* curCi;
+
+  while (iterCi != NULL) {
+    curCi = iterCi;
+    iterCi = iterCi->next;
+
+    free(curCi->chunk_name);
+    free(curCi->section);
+    free(curCi);
+  }
+
+  lstCalypsiChunkInfo = NULL;
+
   type_fileloc* iterF = lstFileLoc;
   type_fileloc* curFileLoc;
 
