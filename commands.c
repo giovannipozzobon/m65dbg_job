@@ -1787,6 +1787,7 @@ bool find_section_name(typ_calypsi_info* ci)
   // look for any .public <chunk_name>
   s = strstr(ci->line, ".section ");
   if (s) {
+    ci->cur_rel_addr = 0;
     return true;
   }
   return false;
@@ -1803,6 +1804,10 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
     // E.g.: '0010                		.public audio_applyvolume'
     // E.g.: '0283                romloaded:'
     // E.g.: '0314  0218 bd....   carc700:	lda runmeafterreset,x'
+//> L84:         0075                             .section code
+//> L85: [$6982] 0076                nmi_handler:
+//> L86: [$695A] 0077  0000 40                    rti
+
     if (find_public_chunk_name(ci))
       return;
 
