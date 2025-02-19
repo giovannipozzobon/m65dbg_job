@@ -1795,6 +1795,7 @@ bool find_section_name(typ_calypsi_info* ci)
 void parse_calypsi_compiler_line(typ_calypsi_info* ci)
 {
   int val;
+  bool count_bytes = false;
 
   if (strlen(ci->line) >= 4 && sscanf(ci->line, "%04d", &val) == 1) {
     ci->cur_srcline = val;
@@ -1816,11 +1817,22 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
         sscanf(ci->line+6, "%04x", &val) == 1)
     {
       ci->cur_rel_addr = val;
+      count_bytes = true;
     }
 
     find_and_add_label(ci);
       
     add_file_loc(ci);
+
+    if (count_bytes) {
+      int cnt = 0;
+      char* b = &ci->line[11];
+      while (*b != ' ') {
+        cnt++;
+        b++;
+      }
+      ci->cur_rel_addr += cnt/2;
+    }
   }
   // E.g.: '    \ 0000                      .public mp_dmacopyjob'
   if (sscanf(ci->line, "    \\ %04X ", &val) == 1) {
