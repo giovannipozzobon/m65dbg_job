@@ -1781,6 +1781,17 @@ bool find_public_chunk_name(typ_calypsi_info* ci)
   return false;
 }
 
+bool find_section_name(typ_calypsi_info* ci)
+{
+  char* s;
+  // look for any .public <chunk_name>
+  s = strstr(ci->line, ".section ");
+  if (s) {
+    return true;
+  }
+  return false;
+}
+
 void parse_calypsi_compiler_line(typ_calypsi_info* ci)
 {
   int val;
@@ -1790,6 +1801,9 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
 
     // E.g.: '0010                		.public audio_applyvolume'
     if (find_public_chunk_name(ci))
+      return;
+
+    if (find_section_name(ci))
       return;
 
     if (strlen(ci->line) >= 10 &&
@@ -1820,6 +1834,9 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
     ci->cur_rel_addr = val;
 
     if (find_public_chunk_name(ci))
+      return;
+
+    if (find_section_name(ci))
       return;
 
     find_and_add_label(ci);
