@@ -1602,6 +1602,42 @@ typedef struct {
   char chunk_name[64];
 } typ_calypsi_info;
 
+#define STATE_LOOK_SECTION 0
+#define STATE_LOOK_PLACED_AT 1
+#define STATE_LOOK_FILENAME 2
+#define STATE_LOOK_DEFINES 3
+#define STATE_READ_DEFINES 4
+
+
+void check_wonky_label(typ_calypsi_info* ci, char* label)
+{
+  char filename[64];
+  char* fname = filename;
+
+  // truncate filename without extension
+  sscanf(ci->line, "(%s ", filename);
+  if (strrchr(filename, '/'))
+    fname = strrchr(filename, '/')+1;
+
+  char*e = strrchr(fname, '.');
+  if (e) {
+    *e = '\0';
+  }
+
+  // for wonky labels, add filename at start
+  char label_name[64];
+  strcpy(label_name, label);
+  if (label[0] == '`') {
+    strcpy(label_name, fname);
+    strcat(label_name, ":");
+    strcat(label_name, label);
+
+    // copy over original string
+    strcpy(label, label_name);
+    printf("wonky = %s\n", label);
+  }
+}
+
 void parse_calypsi_linker_line(typ_calypsi_info* ci)
 {
   static char chunk_name[64];
@@ -1614,7 +1650,7 @@ void parse_calypsi_linker_line(typ_calypsi_info* ci)
 // modplay_reset in section 'code'
  // placed at address 00004b9f-00004c57 of size 000000b9
 
-    case 0:   // look for 'in section' and 'placed at'
+    case STATE_LOOK_SECTION:   // look for 'in section' and 'placed at'
       if (strstr(ci->line, "in section")) {
 
         sscanf(ci->line, "%s in section '%s'", chunk_name, section);
@@ -1622,43 +1658,53 @@ void parse_calypsi_linker_line(typ_calypsi_info* ci)
         ci->line = strstr(ci->line, "placed at address");
         if (!ci->line)
         {
-          ci->state = 1;
+          ci->state = STATE_LOOK_PLACED_AT;
           return;
         }
         sscanf(ci->line, "placed at address %08x-%08x of size %08x", &loc_start, &loc_end, &size);
 
-        add_calypsi_chunk_info(chunk_name, section, loc_start, loc_end, size);
-        ci->state = 2;
+        ci->state = STATE_LOOK_FILENAME;
       }
       break;
 
-    case 1: // look for 'placed at' carried onto next line
+    case STATE_LOOK_PLACED_AT: // look for 'placed at' carried onto next line
       ci->line = strstr(ci->line, "placed at address");
       if (!ci->line) {
-        ci->state = 0;
+        ci->state = STATE_LOOK_SECTION;
         return;
       }
       sscanf(ci->line, "placed at address %08x-%08x of size %08x", &loc_start, &loc_end, &size);
 
+      ci->state = STATE_LOOK_FILENAME;
+      break;
+
+    case STATE_LOOK_FILENAME:
+      if (!strstr(ci->line, " section index ")) {
+        ci->state = STATE_LOOK_SECTION;
+        return;
+      }
+
+      check_wonky_label(ci, chunk_name);
+
       add_calypsi_chunk_info(chunk_name, section, loc_start, loc_end, size);
-      ci->state = 2;
+      ci->state = STATE_LOOK_DEFINES;
       break;
 
-    case 2: // look for 'Defines:'
+    case STATE_LOOK_DEFINES: // look for 'Defines:'
       if (strstr(ci->line, "Defines:"))
-        ci->state = 3;
+        ci->state = STATE_READ_DEFINES;
       if (strlen(ci->line) == 0)
-        ci->state = 0;
+        ci->state = STATE_LOOK_SECTION;
       if (strlen(ci->line) == 1 && ci->line[0] == '\n')
-        ci->state = 0;
+        ci->state = STATE_LOOK_SECTION;
       break;
 
-    case 3: // read out all defines
+    case STATE_READ_DEFINES: // read out all defines
       if (strstr(ci->line, "References:") ||
           strstr(ci->line, "Referenced from:") ||
           strlen(ci->line) == 0 || strlen(ci->line) == 1)
       {
-        ci->state = 0;
+        ci->state = STATE_LOOK_SECTION;
         break;
       }
       
@@ -1703,11 +1749,11 @@ void add_file_loc(typ_calypsi_info* ci)
   add_to_list(fl);
 }
 
-void add_label_to_symmap(char* label, int addr)
+void add_label_to_symmap(char* label, int addr, char* fname)
 {
   char label_name[64];
   strcpy(label_name, label);
-  
+
   // add to map?
   type_symmap_entry sme;
   // done earlier now
@@ -1720,6 +1766,27 @@ void add_label_to_symmap(char* label, int addr)
   add_to_symmap(sme);
 }
 
+void check_chunk_offset(typ_calypsi_info* ci, char* label, int* addr)
+{
+  char label_name[64];
+  strcpy(label_name, label);
+
+  // handle the messy `?Lxx` labels
+  if (label[0] == '`') {
+    char*e = strchr(ci->fname, '.');
+    strncpy(label_name, ci->fname, (int)(e - ci->fname));
+    label_name[(int)(e - ci->fname)] = '\0';
+    strcat(label_name, ":");
+    strcat(label_name, label);
+  }
+
+  if (get_chunk_offset(label_name) != -1) {
+    strcpy(ci->chunk_name, label_name);
+    *addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
+  }
+}
+
+
 void find_and_add_label(typ_calypsi_info* ci)
 {
   int addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
@@ -1729,12 +1796,9 @@ void find_and_add_label(typ_calypsi_info* ci)
     if (strcmp(p, ".byte") == 0) {
       p = get_nth_token(ci->line, 3);
 
-      if (get_chunk_offset(p) != -1) {
-        strcpy(ci->chunk_name, p);
-        addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
-      }
+      check_chunk_offset(ci, p, &addr);
       printf("label: '%s' @ $%04X (from .byte) - line#%d\n", p, addr, ci->lineno);
-      add_label_to_symmap(p, addr);
+      add_label_to_symmap(p, addr, ci->fname);
     }
   }
 
@@ -1754,12 +1818,10 @@ void find_and_add_label(typ_calypsi_info* ci)
       if (s[0] == '\t')
         s++;
 
-      if (get_chunk_offset(s) != -1) {
-        strcpy(ci->chunk_name, s);
-        addr = ci->cur_rel_addr + get_chunk_offset(ci->chunk_name);
-      }
+      check_chunk_offset(ci, s, &addr);
+
       printf("label: '%s' @ $%04X (from .byte) - line#%d\n", s, addr, ci->lineno);
-      add_label_to_symmap(s, addr);
+      add_label_to_symmap(s, addr, ci->fname);
     }
   }
 }
@@ -1771,6 +1833,8 @@ bool find_public_chunk_name(typ_calypsi_info* ci)
   s = strstr(ci->line, ".public ");
   if (s) {
     s += strlen(".public ");
+    if (s[strlen(s)-1] == '\n')
+      s[strlen(s)-1] = '\0';
     strcpy(ci->chunk_name, s);
 
     if (ci->chunk_name[strlen(ci->chunk_name)-1] == '\n')
@@ -1827,9 +1891,9 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
 
     find_and_add_label(ci);
       
-    add_file_loc(ci);
-
     if (count_bytes) {
+      add_file_loc(ci);
+
       int cnt = 0;
       char* b = &ci->line[11];
       while (*b != ' ') {
