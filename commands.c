@@ -1800,6 +1800,8 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
     ci->cur_srcline = val;
 
     // E.g.: '0010                		.public audio_applyvolume'
+    // E.g.: '0283                romloaded:'
+    // E.g.: '0314  0218 bd....   carc700:	lda runmeafterreset,x'
     if (find_public_chunk_name(ci))
       return;
 
@@ -1814,11 +1816,11 @@ void parse_calypsi_compiler_line(typ_calypsi_info* ci)
         sscanf(ci->line+6, "%04x", &val) == 1)
     {
       ci->cur_rel_addr = val;
-
-      find_and_add_label(ci);
-      
-      add_file_loc(ci);
     }
+
+    find_and_add_label(ci);
+      
+    add_file_loc(ci);
   }
   // E.g.: '    \ 0000                      .public mp_dmacopyjob'
   if (sscanf(ci->line, "    \\ %04X ", &val) == 1) {
