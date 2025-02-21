@@ -2868,7 +2868,10 @@ void cmdSet(void)
     }
     else { // assume it is a hex byte
       char *sval = strtok(strValues, " ");
-      strcat(command_str, sval);
+      int v = get_sym_value(sval);
+      char nval[10];
+      sprintf(nval, "%02X", v);
+      strcat(command_str, nval);
       strcat(command_str, " ");
       strValues += strlen(sval);
       if (strValues != strVend && strValues[0] == '\0') // skip any \0 from strtok
@@ -3116,7 +3119,7 @@ void cmdChar(void)
 
   for (int k = 0; k < cnt; k++)
   {
-    mem[k] = get_mem(chr_addr + (k*inc) * 8, true);
+    mem[k] = get_mem(chr_addr + (k*inc) * 8, false);
   }
 
   for (int k = 0; k < 8; k++)
