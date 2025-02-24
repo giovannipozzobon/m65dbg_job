@@ -35,6 +35,7 @@ void print_char(int c);
 int parseBinaryString(char* str);
 unsigned char* get_palette(void);
 
+
 typedef struct
 {
   int addr;
@@ -111,6 +112,20 @@ hyppo_err hyppo_errors[] = {
   { -1,   NULL }
 };
 
+// a few function prototypes
+mem_data get_mem(int addr, bool useAddr28);
+void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal, bool show_char, bool show_binary);
+void print_word_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
+void print_dword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
+void print_qword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
+char* toBinaryString(int val, poke_bitfield_info* bfi);
+mem_data* get_mem28array(int addr);
+int peek(unsigned int address);
+void pokew(unsigned int address, int val);
+void poke(unsigned int address, int val);
+void set_mem(int addr, mem_data mem);
+
+
 void out_errorcode(reg_data* reg)
 {
   int k = 0;
@@ -125,17 +140,102 @@ void out_errorcode(reg_data* reg)
   printf("??? Unknown error code: $%02X\n", reg->a);
 }
 
+mem_data memSetMapping;
+
 void out_getversion(reg_data* reg)
 {
   printf("Hyppo V%d.%d\n", reg->a, reg->x);
   printf("HDOS  V%d.%d\n", reg->y, reg->z);
 }
 
+bool in_set_mapping(hyppo_det *service)
+{
+  int mapl, maph, mblo, mbhi;
+  char* token = strtok(NULL, " ");
+
+  if (!token) {
+    printf("ERROR: Missing arg 1: MAPL\n");
+    printf("  - %s\n", service->help);
+    return false;
+  }
+  mapl = get_sym_value(token);
+
+  token = strtok(NULL, " ");
+  if (!token) {
+    printf("ERROR: Missing arg 2: MAPH\n");
+    printf("  - %s\n", service->help);
+    return false;
+  }
+  maph = get_sym_value(token);
+
+  token = strtok(NULL, " ");
+  if (!token) {
+    printf("ERROR: Missing arg 3: MBLO\n");
+    printf("  - %s\n", service->help);
+    return false;
+  }
+  mblo = get_sym_value(token);
+
+  token = strtok(NULL, " ");
+  if (!token) {
+    printf("ERROR: Missing arg 4: MBHI\n");
+    printf("  - %s\n", service->help);
+    return false;
+  }
+  mbhi = get_sym_value(token);
+
+  // preserve original memory
+  memSetMapping = get_mem(0x200, false);
+
+  poke(0x200, (mapl >> 8) & 0xff); // NOTE: MAPL is in big-endian form
+  poke(0x201, mapl & 0xff);
+
+  poke(0x202, (maph >> 8) & 0xff); // NOTE: MAPH is in big-endian form
+  poke(0x203, maph & 0xff);
+
+  poke( 0x204, mblo);
+  poke( 0x205, mbhi);
+
+  return true;
+}
+
+void out_set_mapping(reg_data* reg)
+{
+  // restore original bytes
+  set_mem(0x0200, memSetMapping);
+}
+
+bool in_get_mapping(hyppo_det* service)
+{
+  // preserve original memory
+  memSetMapping = get_mem(0x200, false);
+  return true;
+}
+
+void out_get_mapping(reg_data* reg)
+{
+  int mapl, maph, mblo, mbhi;
+
+  mapl = (peek(0x200) << 8) | peek(0x201);
+  maph = (peek(0x202) << 8) | peek(0x203);
+  mblo = peek(0x204);
+  mbhi = peek(0x205);
+
+  printf("MAPH=%04X, MAPL=%04X\n", maph, mapl);
+  printf("MBHI=%02X,   MBLO=%02X\n", mbhi, mblo);
+
+  // restore original bytes
+  set_mem(0x0200, memSetMapping);
+}
+
 hyppo_det hyppo_services[] = {
-  { "geterrorcode",         0xd640, 0x38, NULL, out_errorcode },
-  { "getversion",           0xd640, 0x00, NULL, out_getversion },
-  { "setup_transfer_area",  0xd640, 0x3a, NULL, NULL },
-  { NULL,                   0,      0,    NULL, NULL }
+//  service name            addr    areg  yreg  inputfn         outputfn          help
+  { "geterrorcode",         0xd640, 0x38, -1,   NULL,           out_errorcode,    NULL },
+  { "getversion",           0xd640, 0x00, -1,   NULL,           out_getversion,   NULL },
+  { "setup_transfer_area",  0xd640, 0x3a, -1,   NULL,           NULL,             NULL },
+  { "set_mapping",          0xd640, 0x76, 0x02, in_set_mapping, out_set_mapping,  "args: <MAPL> <MAPH> <MBLO> <MBHI>" },
+  { "get_mapping",          0xd640, 0x74, 0x02, in_get_mapping, out_get_mapping,  NULL },
+  { NULL,                   0,      0,    -1,   NULL,           NULL,             NULL }
 };
 
 bool outputFlag = true;
@@ -254,15 +354,6 @@ type_command_details command_details[] =
   { "hyppo", cmdHyppo, "<servicename>", "Performs the desired hyppo call. Note that in many cases, you will have to prepare inputs prior to this call, and assess outputs after the call." },
   { NULL, NULL, NULL, NULL }
 };
-
-// a few function prototypes
-mem_data get_mem(int addr, bool useAddr28);
-void print_byte_at_addr(char* token, int addr, bool useAddr28, bool show_decimal, bool show_char, bool show_binary);
-void print_word_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
-void print_dword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
-void print_qword_at_address(char* token, int addr, bool useAddr28, bool show_decimal);
-char* toBinaryString(int val, poke_bitfield_info* bfi);
-mem_data* get_mem28array(int addr);
 
 char* get_extension(char* fname)
 {
@@ -2213,6 +2304,44 @@ int mpeekw(unsigned int address)
 {
   mem_data mem = get_mem(address, true);
   return mem.b[0] + (mem.b[1] << 8);
+}
+
+void poke(unsigned int address, int val)
+{
+  char command_str[1024] = { 0 };
+  char nval[10];
+
+  sprintf(command_str, "s %04X ", address);
+
+  sprintf(nval, "%02X", val);
+  strcat(command_str, nval);
+  strcat(command_str, " ");
+
+  strcat(command_str, "\n");
+
+  serialWrite(command_str);
+  serialRead(inbuf, BUFSIZE);
+}
+
+void pokew(unsigned int address, int val)
+{
+  char command_str[1024] = { 0 };
+  char nval[10];
+
+  sprintf(command_str, "s %04X ", address);
+
+  sprintf(nval, "%02X", val & 0xff);
+  strcat(command_str, nval);
+  strcat(command_str, " ");
+
+  sprintf(nval, "%02X", (val >> 8) & 0xff);
+  strcat(command_str, nval);
+  strcat(command_str, " ");
+
+  strcat(command_str, "\n");
+
+  serialWrite(command_str);
+  serialRead(inbuf, BUFSIZE);
 }
 
 // read all 16 at once (to hopefully speed things up for saving memory dumps)
@@ -5401,40 +5530,72 @@ int find_hyppo_service_by_name(char *name)
 void cmdHyppo(void)
 {
   char* token = strtok(NULL, " ");
+  hyppo_det* hd;
 
-  if (token != NULL) {
-    int hs_idx = find_hyppo_service_by_name(token);
+  if (token == NULL) {
+    printf("ERROR: Missing hyppo service name argument!\n");
+    printf("Available services:\n");
 
-    if (hs_idx == -1) {
-      printf("ERROR: hyppo service not found\n");
-      return;
+    int k = 0;
+    while (hyppo_services[k].name != NULL) {
+      hd = &hyppo_services[k];
+      printf("  - %s ($%04X - A = $%02X", hd->name, hd->addr, hd->a);
+      if (hd->y != -1)
+        printf(", Y = $%02X", hd->y);
+      printf(")");
+      if (hd->help != NULL)
+        printf(" %s", hd->help);
+      printf("\n");
+      k++;
     }
-
-    char lda_cmd[16];
-    char sta_cmd[16];
-
-    sprintf(lda_cmd, "lda #$%02X", hyppo_services[hs_idx].a);
-    sprintf(sta_cmd, "sta $%04X", hyppo_services[hs_idx].addr);
-
-    char* hyppo_routine[] = { "pha", "phx", "phy", "phz", "php", lda_cmd, sta_cmd, "clv", NULL };
-
-    for (int k = 5; k < 8; k++) {
-      printf("  %s\n", hyppo_routine[k]);
-    }
-
-    call_temp_routine(hyppo_routine);
-
-    reg_data reg = get_regs();
-
-    char* cleanup_routine[] = { "plp", "plz", "ply", "plx", "pla", NULL };
-    call_temp_routine(cleanup_routine);
-
-    show_regs(&reg);
-
-    if (hyppo_services[hs_idx].outputfn != NULL)
-      hyppo_services[hs_idx].outputfn(&reg);
-
+    return;
   }
+
+  int hs_idx = find_hyppo_service_by_name(token);
+
+  if (hs_idx == -1) {
+    printf("ERROR: hyppo service not found\n");
+    return;
+  }
+
+  hd = &hyppo_services[hs_idx];
+
+  if (hd->inputfn != NULL) {
+    bool ret = hd->inputfn(hd);
+    if (ret == false)
+      return;
+  }
+
+  char ldy_cmd[16];
+  char lda_cmd[16];
+  char sta_cmd[16];
+
+
+  if (hd->y != -1)
+    sprintf(ldy_cmd, "ldy #$%02X", hd->y);
+  else
+    sprintf(ldy_cmd, "nop");
+
+  sprintf(lda_cmd, "lda #$%02X", hd->a);
+  sprintf(sta_cmd, "sta $%04X", hd->addr);
+
+  char* hyppo_routine[] = { "pha", "phx", "phy", "phz", "php", ldy_cmd, lda_cmd, sta_cmd, "clv", NULL };
+
+  for (int k = 5; hyppo_routine[k] != NULL; k++) {
+    printf("  %s\n", hyppo_routine[k]);
+  }
+
+  call_temp_routine(hyppo_routine);
+
+  reg_data reg = get_regs();
+
+  char* cleanup_routine[] = { "plp", "plz", "ply", "plx", "pla", NULL };
+  call_temp_routine(cleanup_routine);
+
+  show_regs(&reg);
+
+  if (hd->outputfn != NULL)
+    hd->outputfn(&reg);
 }
 
 
@@ -5817,7 +5978,7 @@ char* get_rom_chunk_name(int mb, int addr)
 
 void cmdMapping(void)
 {
-  int reg_01 = mpeek(0x01);
+  int reg_01 = peek(0x01);  // only visible in 16-bit cpu context (not in 28-bit address space, so don't use mpeek)
   int reg_d030 = mpeek(0xffd3030);
 
   stop_cpu_if_running();

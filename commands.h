@@ -129,12 +129,14 @@ typedef struct
   char flags[16];
 } reg_data;
 
-typedef struct {
+typedef struct hdet {
   const char* name;
   int addr;
   int a;
-  void (*inputfn)(void);
+  int y;
+  bool (*inputfn)(struct hdet* service);
   void (*outputfn)(reg_data* reg);
+  char* help;
 } hyppo_det;
 
 
