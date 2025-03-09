@@ -43,7 +43,7 @@ static const int B4000000 = 4000000;
 #endif
 
 // borrow this from commands.c
-extern int peek(unsigned int address);
+extern int mpeek(unsigned int address);
 
 int xemu_flag = 0;
 
@@ -237,7 +237,7 @@ bool serialOpen(char* portname)
     //fcntl(fd,F_SETFL,fcntl(fd, F_GETFL, NULL)|O_NONBLOCK);
   }
 
-  xemu_flag = peek(0xffd360f) & 0x20 ? 0 : 1;
+  xemu_flag = mpeek(0xffd360f) & 0x20 ? 0 : 1;
   if (xemu_flag)
     printf("Xemu detected!\n");
   else
