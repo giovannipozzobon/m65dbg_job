@@ -124,6 +124,7 @@ int peek(unsigned int address);
 void pokew(unsigned int address, int val);
 void poke(unsigned int address, int val);
 void set_mem(int addr, mem_data mem);
+void set_mem28array(int addr, mem_data* multimem);
 
 
 void out_errorcode(reg_data* reg)
@@ -141,6 +142,7 @@ void out_errorcode(reg_data* reg)
 }
 
 mem_data memSetMapping;
+mem_data* multimemPage;
 
 void out_getversion(reg_data* reg)
 {
@@ -228,14 +230,48 @@ void out_get_mapping(reg_data* reg)
   set_mem(0x0200, memSetMapping);
 }
 
+bool in_get_proc_desc(hyppo_det* service)
+{
+  multimemPage = get_mem28array(0x7770200);
+  return true;
+}
+
+void out_get_proc_desc(reg_data* reg)
+{
+  char str[64];
+  printf("Task ID: %d\n", peek(0x200 + 0x00));
+  for (int k = 0; k < 16; k++)
+    str[k] = peek(0x200 + 0x01 + k);
+  str[16] = '\0';
+  printf("Task Name: %s\n", str);
+  int flags = peek(0x200 + 0x11);
+  printf("Drive 0 D81 Flags: $%02X - %s\n", flags, toBinaryString(flags, NULL));
+  flags = peek(0x200 + 0x12);
+  printf("Drive 1 D81 Flags: $%02X - %s\n", flags, toBinaryString(flags, NULL));
+  int len0 = peek(0x200 + 0x13);
+  int len1 = peek(0x200 + 0x14);
+  for (int k = 0; k < 32; k++)
+    str[k] = peek(0x200 + 0x15 + k);
+  str[32] = '\0';
+  printf("Drive 0 Disk Image: %s (len=%d)\n", str, len0);
+  for (int k = 0; k < 32; k++)
+    str[k] = peek(0x200 + 0x35 + k);
+  str[32] = '\0';
+  printf("Drive 1 Disk Image: %s (len=%d)\n", str, len1);
+
+  set_mem28array(0x7770200, multimemPage);
+}
+
+
 hyppo_det hyppo_services[] = {
-//  service name            addr    areg  yreg  inputfn         outputfn          help
-  { "geterrorcode",         0xd640, 0x38, -1,   NULL,           out_errorcode,    NULL },
-  { "getversion",           0xd640, 0x00, -1,   NULL,           out_getversion,   NULL },
-  { "setup_transfer_area",  0xd640, 0x3a, -1,   NULL,           NULL,             NULL },
-  { "set_mapping",          0xd640, 0x76, 0x02, in_set_mapping, out_set_mapping,  "args: <MAPL> <MAPH> <MBLO> <MBHI>" },
-  { "get_mapping",          0xd640, 0x74, 0x02, in_get_mapping, out_get_mapping,  NULL },
-  { NULL,                   0,      0,    -1,   NULL,           NULL,             NULL }
+//  service name            addr    areg  yreg  inputfn           outputfn            help
+  { "geterrorcode",         0xd640, 0x38, -1,   NULL,             out_errorcode,      NULL },
+  { "getversion",           0xd640, 0x00, -1,   NULL,             out_getversion,     NULL },
+  { "setup_transfer_area",  0xd640, 0x3a, -1,   NULL,             NULL,               NULL },
+  { "set_mapping",          0xd640, 0x76, 0x02, in_set_mapping,   out_set_mapping,    "args: <MAPL> <MAPH> <MBLO> <MBHI>" },
+  { "get_mapping",          0xd640, 0x74, 0x02, in_get_mapping,   out_get_mapping,    NULL },
+  { "get_proc_desc",        0xd640, 0x48, 0x02, in_get_proc_desc, out_get_proc_desc,  NULL },
+  { NULL,                   0,      0,    -1,   NULL,             NULL,               NULL }
 };
 
 bool outputFlag = true;
@@ -312,7 +348,7 @@ type_command_details command_details[] =
   { "autowatch", cmdAutoWatch, "0/1", "If set to 1, shows all watches prior to every step/next/dis command" },
   { "symbol", cmdSymbolValue, "<symbol|$hex>", "retrieves the value of the symbol from the .map file. Alternatively, can find symbol name/s matching given $hex address. If two $hex values are given, it finds all symbols within this range" },
   { "save", cmdSave, "<binfile> <addr28> <count>", "saves out a memory dump to <binfile> starting from <addr28> and for <count> bytes" },
-  { "load", cmdLoad, "<binfile> <addr28>", "loads in <binfile> to <addr28>" },
+  { "load", cmdLoad, "<binfile> <addr28> (<offset> <count>)", "loads in <binfile> to <addr28> (with an optional offset and count of bytes to load)" },
   { "poke", cmdPoke, "<addr16> <byte/s>", "pokes byte value/s into <addr16> (and beyond, if multiple values)" },
   { "pokew", cmdPokeW, "<addr16> <word/s>", "pokes word value/s into <addr16> (and beyond, if multiple values)" },
   { "poked", cmdPokeD, "<addr16> <dword/s>", "pokes dword value/s into <addr16> (and beyond, if multiple values)" },
@@ -1251,6 +1287,8 @@ void load_ca65_list(const char* fname, FILE* f)
   char current_segment[256] = { 0 };
   int lineno = 1;
   char *cmod = NULL;
+  int extra_offs = 0;
+  bool first_add = true;
 
   while (!feof(f))
   {
@@ -1271,6 +1309,13 @@ void load_ca65_list(const char* fname, FILE* f)
       current_segment[0] = '\0';
       // printf("current_module=%s\n", current_module);
       cmod = get_module_string(current_module);
+    }
+
+    if (strstr(line, ".word") && first_add)  // some folks use a word to define location of .prg at start
+    {
+      char *p = strstr(line, "$") + 1;
+      sscanf(p, "%X", &extra_offs);
+      extra_offs -= 2;
     }
 
     if (line[0] == '\0' || line[0] == '\r' || line[0] == '\n')
@@ -1305,6 +1350,11 @@ void load_ca65_list(const char* fname, FILE* f)
         addr += get_segment_offset(current_segment);
         addr += get_module_offset(current_module, current_segment);
       }
+
+      if (addr != 0)
+        first_add = false;
+
+      addr += extra_offs;
 
       parse_function(line, addr);
 
@@ -5419,17 +5469,33 @@ void stop_cpu_if_running(void)
 
 void set_mem(int addr, mem_data mem)
 {
-    char str[64];
+    char str[1024];
+    char extra[16];
     // reset byte-values at this point
+
+    sprintf(str, "s777%04X ", addr);
+
     for (int k = 0; k < 16; k++)
     {
-      sprintf(str, "s777%04X %02X\n", addr+k, mem.b[k]);
-      serialWrite(str);
-      usleep(10000);
-      serialRead(inbuf, BUFSIZE);
+      sprintf(extra, "%02X ", mem.b[k]);
+      strcat(str, extra);
     }
+
+    strcat(str, "\n");
+    serialWrite(str);
+    usleep(10000);
+    serialRead(inbuf, BUFSIZE);
     serialFlush();
 }
+
+void set_mem28array(int addr, mem_data* multimem)
+{
+  for (int k = 0; k < 16; k++)
+  {
+    set_mem(addr + k * 16, multimem[k]);
+  }
+}
+
 
 void call_temp_routine(char** routine)
 {
@@ -6428,12 +6494,30 @@ void cmdLoad(void)
 
   int addr = get_sym_value(strAddr);
 
-    FILE* fload = fopen(strBinFile, "rb");
+  char* strOffset = strtok(NULL, " ");
+  int offs = 0;
+  if (strOffset)
+  {
+    sscanf(strOffset, "%X", &offs);
+  }
+  char* strCount = strtok(NULL, " ");
+  int count = -1;
+  if (strCount)
+  {
+    sscanf(strCount, "%X", &count);
+  }
+
+  FILE* fload = fopen(strBinFile, "rb");
+
   if(fload)
   {
     fseek(fload, 0, SEEK_END);
     int fsize = ftell(fload);
     rewind(fload);
+    if (offs != 0)
+      fseek(fload, offs, SEEK_SET);
+    if (count != -1)
+      fsize = count;
     char* buffer = (char *)malloc(fsize*sizeof(char));
     if(buffer)
     {
