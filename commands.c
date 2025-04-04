@@ -3832,7 +3832,7 @@ int* get_backtrace_addresses(void)
   return addresses;
 }
 
-#define PCCNT 400
+#define PCCNT 2400
 
 int zpos = 0;
 int zval[PCCNT];
