@@ -94,7 +94,7 @@ int  cmdGetCmdCount(void);
 char* cmdGetCmdName(int idx);
 int isValidMnemonic(char* str);
 
-#define BUFSIZE 4096
+#define BUFSIZE 65536
 
 extern char outbuf[];
 extern char inbuf[];
