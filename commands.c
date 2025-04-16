@@ -2953,7 +2953,11 @@ void cmdBasicList(void)
         {
           if (quote_flag)
           {
-            strcat(line, mapPetscii[token]);
+            strcpy(s,mapPetscii[token]);
+            if (strlen(s) == 0) {
+              sprintf(s, "{$%02X}", token);
+            }
+            strcat(line, s);
           }
           else
           {
