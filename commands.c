@@ -376,7 +376,7 @@ type_command_details command_details[] =
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { "seam", cmdSeam, "[row][col]", "display attributes of selected SEAM character" },
-  { "blist", cmdBasicList, NULL, "list the current basic program" },
+  { "blist", cmdBasicList, "[/d] [start] [end]", "list the current basic program (add /d for optional debug output, or optional start/end line number range)" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index\n"
 "                 (based on currently selected vicii bank at $dd00)\n"
 "                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
@@ -2881,12 +2881,35 @@ void cmdBasicList(void)
   char line[512] = { 0 };
   char s[50];
   mmem = NULL;
+  bool dataflag = false;
+  int start = -1;
+  int end = -1;
+  char* df;
+
+  while ( (df = strtok(NULL, " ")) != NULL)
+  {
+    if (strcmp(df, "/d") == 0)
+    {
+      dataflag = true;
+    }
+    else if (start == -1)
+    {
+      start = get_sym_value(df);
+      end = start;
+    }
+    else if (end == start)
+    {
+      end = get_sym_value(df);
+    }
+  }
 
   int ptr = 0x2001;
+  int orig_ptr;
   bool quote_flag = false;
 
   while (ptr != 0x0000)
   {
+    orig_ptr = ptr;
     int nextptr = get_mm_word(ptr);
     if (nextptr == 0x0000)
       break;
@@ -2894,6 +2917,13 @@ void cmdBasicList(void)
     ptr += 2;
     int linenum = get_mm_word(ptr);
     ptr += 2;
+
+    bool inrange = false;
+    if (start == -1)
+      inrange = true;
+    if (start <= linenum && linenum <= end)
+      inrange = true;
+
     sprintf(line, "%d ", linenum);
 
     int token;
@@ -2939,7 +2969,20 @@ void cmdBasicList(void)
     }
     while (token != 0x00);
 
-    printf("%s\n", line);
+    if (inrange)
+    {
+      printf("%s\n", line);
+      if (dataflag)
+      {
+        printf("[%04X] : ", orig_ptr);
+        for (int k = orig_ptr; k < ptr; k++)
+        {
+          int c = get_mm_byte(k);
+          printf("%02X ", c);
+        }
+        printf("\n\n");
+      }
+    }
     ptr = nextptr;
   }
 }
