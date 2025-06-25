@@ -376,7 +376,7 @@ type_command_details command_details[] =
   { "autolocals", cmdAutoLocals, "0/1", "If set to 1, shows all locals prior to every step/next/dis command" },
   { "mapping", cmdMapping, NULL, "Summarise the current $D030/MAP/$01 mapping of the system" },
   { "seam", cmdSeam, "[row][col]", "display attributes of selected SEAM character" },
-  { "blist", cmdBasicList, NULL, "list the current basic program" },
+  { "blist", cmdBasicList, "[/d] [start] [end]", "list the current basic program (add /d for optional debug output, or optional start/end line number range)" },
   { "sprite", cmdSprite, "<spridx>", "print out the bits of the sprite at the given index\n"
 "                 (based on currently selected vicii bank at $dd00)\n"
 "                 If the index is in the form $xxxx, it is treated as an absolute memory address." },
@@ -2876,17 +2876,76 @@ char mapBasTok[256][12] =
   "DLOAD", "HEADER", "SCRATCH", "COLLECT", "COPY", "RENAME", "BACKUP", "DELETE", "RENUMBER", "KEY", "MONITOR", "USING", "UNTIL", "WHILE", "", "",
 };
 
+char mapEscTok[256][12] =
+{
+  // 0x00 - 0x0f
+  "", "", "POT", "BUMP", "LPEN", "RSPPOS", "RSPRITE", "RSPCOLOR", "LOG10", "RWINDOW", "POINTER", "MOD", "PIXEL", "RPALETTE", "RSPEED", "RPLAY",
+  // 0x10 - 0x1f
+  "WPEEK", "DECBIN", "STRBIN", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x20 - 0x2f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x30 - 0x3f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x40 - 0x4f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x50 - 0x5f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x60 - 0x6f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x70 - 0x7f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x80 - 0x8f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0x90 - 0x9f
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xa0 - 0xaf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xb0 - 0xbf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xc0 - 0xcf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xd0 - 0xdf
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xe0 - 0xef
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+  // 0xf0 - 0xff
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+};
+
 void cmdBasicList(void)
 {
   char line[512] = { 0 };
   char s[50];
   mmem = NULL;
+  bool dataflag = false;
+  int start = -1;
+  int end = -1;
+  char* df;
+
+  while ( (df = strtok(NULL, " ")) != NULL)
+  {
+    if (strcmp(df, "/d") == 0)
+    {
+      dataflag = true;
+    }
+    else if (start == -1)
+    {
+      start = get_sym_value(df);
+      end = start;
+    }
+    else if (end == start)
+    {
+      end = get_sym_value(df);
+    }
+  }
 
   int ptr = 0x2001;
+  int orig_ptr;
   bool quote_flag = false;
 
   while (ptr != 0x0000)
   {
+    orig_ptr = ptr;
     int nextptr = get_mm_word(ptr);
     if (nextptr == 0x0000)
       break;
@@ -2894,6 +2953,13 @@ void cmdBasicList(void)
     ptr += 2;
     int linenum = get_mm_word(ptr);
     ptr += 2;
+
+    bool inrange = false;
+    if (start == -1)
+      inrange = true;
+    if (start <= linenum && linenum <= end)
+      inrange = true;
+
     sprintf(line, "%d ", linenum);
 
     int token;
@@ -2923,12 +2989,25 @@ void cmdBasicList(void)
         {
           if (quote_flag)
           {
-            strcat(line, mapPetscii[token]);
+            strcpy(s,mapPetscii[token]);
+            if (strlen(s) == 0) {
+              sprintf(s, "{$%02X}", token);
+            }
+            strcat(line, s);
           }
           else
           {
-            sprintf(s, "{0x%02X}", token);
-            strcat(line, s);
+            if (token == 0xce && mapEscTok[get_mm_byte(ptr)][0] != '\0') // basic escape token?
+            {
+              token = get_mm_byte(ptr);
+              ptr++;
+              strcat(line, mapEscTok[token]);
+            }
+            else
+            {
+              sprintf(s, "{0x%02X}", token);
+              strcat(line, s);
+            }
           }
         }
         else
@@ -2939,7 +3018,20 @@ void cmdBasicList(void)
     }
     while (token != 0x00);
 
-    printf("%s\n", line);
+    if (inrange)
+    {
+      printf("%s\n", line);
+      if (dataflag)
+      {
+        printf("[%04X] : ", orig_ptr);
+        for (int k = orig_ptr; k < ptr; k++)
+        {
+          int c = get_mm_byte(k);
+          printf("%02X ", c);
+        }
+        printf("\n\n");
+      }
+    }
     ptr = nextptr;
   }
 }
